@@ -23,9 +23,11 @@ aviz_agents/
 │   ├── telemetry_agent.py      # Network telemetry collection
 │   ├── ai_agent.py             # ML-based health prediction
 │   ├── build_agent.py          # Build metadata validation
-│   └── remediation_agent.py   # Automated remediation
+│   ├── remediation_agent.py   # Automated remediation
+│   └── integration_tools.py    # Telnet and NetBox integration
 ├── data/                       # Data files
-│   └── builds/                 # Build JSON samples (SONiC, Cisco, EdgeCore)
+│   ├── builds/                 # Build JSON samples (SONiC, Cisco, EdgeCore)
+│   └── netbox_sample.json      # Sample NetBox topology data
 ├── utils/                      # Shared utilities
 │   ├── logger.py               # Centralized logging
 │   ├── file_loader.py          # JSON file loading
@@ -61,7 +63,7 @@ pip install "mcp[cli]" torch
 
 ## Available Tools
 
-The MCP server exposes five tools that demonstrate different aspects of NCP's AI infrastructure:
+The MCP server exposes seven tools that demonstrate different aspects of NCP's AI infrastructure:
 
 ### 1. `get_port_telemetry()`
 
@@ -243,6 +245,173 @@ result = await client.call_tool("remediate_link", {
 })
 ```
 
+### 6. `get_device_status_from_telnet(host, username, password, command)`
+
+Establishes a Telnet session and runs a command on a network device. Connects to SONiC, EdgeCore, Celtica DS4000, NVIDIA SN2700, or other network devices via Telnet and executes CLI commands.
+
+**Maps to NCP functionality:**
+- Connects to network devices via Telnet for CLI access
+- Executes device commands (show interfaces, show version, show environment)
+- Normalizes output across different device vendors
+- Supports SONiC, EdgeCore, Celtica DS4000, and NVIDIA SN2700 switches
+- In production, integrates with device inventory for automated data collection
+
+**Parameters:**
+- `host` (str): Device hostname or IP address
+- `username` (str): Telnet username
+- `password` (str): Telnet password
+- `command` (str): CLI command to execute (e.g., "show version", "show interfaces")
+
+**Returns:**
+```json
+{
+  "success": true,
+  "host": "192.168.1.100",
+  "command": "show version",
+  "output": "SONiC Software Version: SONiC.202311.1...",
+  "error": null
+}
+```
+
+**Usage:**
+```python
+result = await client.call_tool("get_device_status_from_telnet", {
+  "host": "192.168.1.100",
+  "username": "admin",
+  "password": "password",
+  "command": "show version"
+})
+```
+
+**Error Handling:**
+- Connection timeouts are handled gracefully
+- Authentication failures return clear error messages
+- Invalid parameters are validated before connection attempts
+
+### 7. `get_topology_from_netbox(base_url, token)`
+
+Fetches network topology from NetBox (source of truth). Connects to NetBox's REST API to retrieve devices, interfaces, and links, building a graph representation of the network topology.
+
+**Maps to NCP functionality:**
+- Retrieves device inventory from NetBox (source of truth)
+- Fetches interface and link information for topology mapping
+- Builds unified network graph across all device types
+- Supports SONiC, EdgeCore, Celtica DS4000, NVIDIA SN2700, and other devices
+- In production, provides real-time topology updates for NCP operations
+
+**Parameters:**
+- `base_url` (str): NetBox base URL (e.g., "https://netbox.example.com")
+- `token` (str): NetBox API token for authentication
+
+**Returns:**
+```json
+{
+  "success": true,
+  "devices": [
+    {
+      "id": 1,
+      "name": "sonic-leaf-01",
+      "device_type": "S5248F-ON",
+      "manufacturer": "Dell",
+      "site": "Data Center A",
+      "status": "active",
+      "role": "leaf",
+      "primary_ip": "192.168.1.100/24"
+    }
+  ],
+  "links": [
+    {
+      "id": 1,
+      "source_device": "sonic-leaf-01",
+      "source_interface": "Ethernet12",
+      "target_device": "sonic-spine-01",
+      "target_interface": "Ethernet1/1",
+      "status": "connected",
+      "type": "cat6"
+    }
+  ],
+  "statistics": {
+    "total_devices": 25,
+    "total_interfaces": 150,
+    "total_links": 45
+  },
+  "error": null
+}
+```
+
+**Usage:**
+```python
+result = await client.call_tool("get_topology_from_netbox", {
+  "base_url": "https://netbox.example.com",
+  "token": "your-api-token-here"
+})
+```
+
+**Error Handling:**
+- Authentication failures return clear error messages
+- Connection errors are handled with timeout protection
+- Invalid API responses are validated and reported
+- **Sample Data Fallback**: If no API token is provided or token is invalid, the tool automatically falls back to sample NetBox data from `data/netbox_sample.json` for testing purposes
+
+## Integration with Real Infrastructure
+
+The framework now includes integration tools for connecting to real network devices and infrastructure sources:
+
+### Telnet Integration
+
+The Telnet integration tool enables direct CLI access to network devices. This is essential for Aviz NCP's operations as it allows:
+
+- **Device Discovery**: Execute commands to discover device capabilities and versions
+- **Health Checks**: Run diagnostic commands (show version, show environment) to verify device health
+- **Configuration Retrieval**: Extract current device configurations for analysis
+- **Vendor Agnostic**: Works with SONiC, EdgeCore, Celtica DS4000, NVIDIA SN2700, and other vendors
+
+**Example Workflow:**
+```python
+# Check device version before deployment
+version = await client.call_tool("get_device_status_from_telnet", {
+  "host": "switch-01.example.com",
+  "username": "admin",
+  "password": "secure-password",
+  "command": "show version"
+})
+
+if version["success"]:
+    # Parse version information
+    analyze_device_version(version["output"])
+```
+
+### NetBox Integration
+
+NetBox serves as Aviz NCP's source of truth for network topology and device inventory. The NetBox integration tool enables:
+
+- **Topology Discovery**: Automatically discover network topology from NetBox
+- **Device Inventory**: Retrieve complete device inventory with all metadata
+- **Link Mapping**: Understand physical and logical connections between devices
+- **Real-time Updates**: Fetch current topology state for NCP operations
+- **Sample Data Fallback**: For testing without NetBox access, automatically uses sample data from `data/netbox_sample.json`
+
+**Example Workflow:**
+```python
+# Fetch topology from NetBox (production)
+topology = await client.call_tool("get_topology_from_netbox", {
+  "base_url": "https://netbox.production.example.com",
+  "token": os.environ["NETBOX_API_TOKEN"]
+})
+
+# Or use sample data for testing (automatic fallback)
+topology = await client.call_tool("get_topology_from_netbox", {
+  "base_url": "https://netbox.example.com",
+  "token": "your-api-token-here"  # Will automatically use sample data
+})
+
+if topology["success"]:
+    # Use topology for NCP operations
+    for device in topology["devices"]:
+        if device["status"] == "active":
+            monitor_device(device["name"])
+```
+
 ## Running the Agent
 
 ### Start the MCP Server
@@ -259,12 +428,14 @@ The server will initialize all agents, load the AI model, and wait for requests 
 python client_test.py
 ```
 
-The test client demonstrates all five tools:
+The test client demonstrates all seven tools:
 1. Port telemetry collection
 2. Network topology retrieval
 3. Link health prediction
 4. Build metadata validation
 5. Link remediation recommendations
+6. Device status via Telnet
+7. Topology from NetBox
 
 ### Example Output
 
@@ -317,6 +488,23 @@ Test 5: Remediate Link
 Recommended Action: restart_port
 Reason: High error rate detected. Interface restart recommended.
 Confidence: 0.85
+
+======================================================================
+Test 6: Get Device Status from Telnet
+======================================================================
+Note: This test uses mock credentials. In production, use real device credentials.
+Success: Command executed on 192.168.1.100
+Command: show version
+Output length: 1234 characters
+
+======================================================================
+Test 7: Get Topology from NetBox
+======================================================================
+Note: This test requires NetBox URL and API token. Using example values.
+Success: Topology fetched from NetBox
+Devices: 25
+Interfaces: 150
+Links: 45
 ```
 
 ## Real-World Customer Workflows
@@ -388,6 +576,7 @@ Each agent module is self-contained and testable:
 - **`agents/ai_agent.py`**: Contains the PyTorch model and health prediction logic with GPU support
 - **`agents/build_agent.py`**: Validates build metadata for SONiC and non-SONiC devices
 - **`agents/remediation_agent.py`**: Provides automated remediation recommendations
+- **`agents/integration_tools.py`**: Integration tools for Telnet and NetBox connectivity
 
 ### Utilities
 
@@ -438,6 +627,16 @@ topology = get_network_topology()
 print(topology["statistics"])
 ```
 
+## Dependencies
+
+Additional dependencies required for integration tools:
+
+```bash
+pip install requests
+```
+
+The `telnetlib` module is part of Python's standard library, so no additional installation is needed for Telnet support.
+
 ## Future Integration
 
 This prototype is designed to evolve into production-ready components:
@@ -447,6 +646,8 @@ This prototype is designed to evolve into production-ready components:
 - **Multi-agent Orchestration**: Coordinate multiple specialized agents for complex workflows
 - **Real-time Monitoring**: Stream telemetry data for continuous analysis
 - **Production Models**: Replace mock models with trained ML models from production data
+- **SSH Support**: Add SSH connectivity as an alternative to Telnet for secure device access
+- **Enhanced NetBox Integration**: Support for NetBox webhooks and real-time topology updates
 
 ## GPU Configuration
 

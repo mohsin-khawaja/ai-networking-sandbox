@@ -12,6 +12,7 @@ from agents.telemetry_agent import get_port_telemetry as _get_port_telemetry, ge
 from agents.ai_agent import predict_link_health as _predict_link_health
 from agents.build_agent import validate_build_metadata as _validate_build_metadata
 from agents.remediation_agent import remediate_link as _remediate_link
+from agents.integration_tools import get_device_status_from_telnet as _get_device_status_from_telnet, get_topology_from_netbox as _get_topology_from_netbox
 
 # Initialize logger
 logger = setup_logger(__name__)
@@ -191,6 +192,87 @@ def remediate_link(interface: str) -> dict:
 
 
 # -----------------------------
+# 5. INTEGRATION TOOLS
+# -----------------------------
+
+@mcp.tool()
+def get_device_status_from_telnet(host: str, username: str, password: str, command: str) -> dict:
+    """
+    Establish a Telnet session and run a command on a network device.
+    
+    Connects to SONiC, EdgeCore, Celtica DS4000, NVIDIA SN2700, or other network
+    devices via Telnet and executes CLI commands like show interfaces, show version,
+    and show environment.
+    
+    Maps to Aviz NCP functionality:
+    - Connects to network devices via Telnet for CLI access
+    - Executes device commands (show interfaces, show version, show environment)
+    - Normalizes output across different device vendors
+    - Supports SONiC, EdgeCore, Celtica DS4000, and NVIDIA SN2700 switches
+    - In production, integrates with device inventory for automated data collection
+    
+    Args:
+        host: Device hostname or IP address
+        username: Telnet username
+        password: Telnet password
+        command: CLI command to execute (e.g., "show version", "show interfaces")
+        
+    Returns:
+        Dictionary containing success status, command output, and error information
+    """
+    try:
+        return _get_device_status_from_telnet(host, username, password, command)
+    except Exception as e:
+        logger.error(f"Error executing Telnet command: {e}")
+        return {
+            "success": False,
+            "host": host,
+            "command": command,
+            "output": "",
+            "error": f"Telnet execution failed: {str(e)}"
+        }
+
+
+@mcp.tool()
+def get_topology_from_netbox(base_url: str, token: str) -> dict:
+    """
+    Fetch network topology from NetBox (source of truth).
+    
+    Connects to NetBox's REST API to retrieve devices, interfaces, and links,
+    building a graph representation of the network topology.
+    
+    Maps to Aviz NCP functionality:
+    - Retrieves device inventory from NetBox (source of truth)
+    - Fetches interface and link information for topology mapping
+    - Builds unified network graph across all device types
+    - Supports SONiC, EdgeCore, Celtica DS4000, NVIDIA SN2700, and other devices
+    - In production, provides real-time topology updates for NCP operations
+    
+    Args:
+        base_url: NetBox base URL (e.g., "https://netbox.example.com")
+        token: NetBox API token for authentication
+        
+    Returns:
+        Dictionary containing devices (nodes), links (edges), and topology statistics
+    """
+    try:
+        return _get_topology_from_netbox(base_url, token)
+    except Exception as e:
+        logger.error(f"Error fetching topology from NetBox: {e}")
+        return {
+            "success": False,
+            "devices": [],
+            "links": [],
+            "statistics": {
+                "total_devices": 0,
+                "total_interfaces": 0,
+                "total_links": 0
+            },
+            "error": f"NetBox fetch failed: {str(e)}"
+        }
+
+
+# -----------------------------
 # ENTRY POINT
 # -----------------------------
 if __name__ == "__main__":
@@ -201,6 +283,8 @@ if __name__ == "__main__":
     logger.info("  3. predict_link_health - AI-based link health prediction")
     logger.info("  4. validate_build_metadata - Validate build JSON files")
     logger.info("  5. remediate_link - Automated link remediation recommendations")
+    logger.info("  6. get_device_status_from_telnet - Execute commands via Telnet")
+    logger.info("  7. get_topology_from_netbox - Fetch topology from NetBox")
     logger.info("Waiting for requests on stdio...")
     
     try:

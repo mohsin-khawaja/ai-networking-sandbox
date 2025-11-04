@@ -187,11 +187,77 @@ else:
     print("Error: Failed to get remediation recommendation")
 print()
 
+# Test 6: Get device status from Telnet
+print("=" * 70)
+print("Test 6: Get Device Status from Telnet")
+print("=" * 70)
+print("Note: This test uses mock credentials. In production, use real device credentials.")
+telnet_data = call_tool(proc, "get_device_status_from_telnet", {
+    "host": "192.168.1.100",
+    "username": "admin",
+    "password": "password",
+    "command": "show version"
+}, request_id)
+request_id += 1
+if telnet_data:
+    if telnet_data.get("success"):
+        print(f"Success: Command executed on {telnet_data.get('host')}")
+        print(f"Command: {telnet_data.get('command')}")
+        print(f"Output length: {len(telnet_data.get('output', ''))} characters")
+        if telnet_data.get("output"):
+            print("\nCommand output (first 500 chars):")
+            output = telnet_data.get("output", "")
+            print(output[:500] + ("..." if len(output) > 500 else ""))
+    else:
+        print(f"Error: {telnet_data.get('error', 'Unknown error')}")
+        print("This is expected if no device is reachable at the test IP.")
+    print("\nFull Telnet result:")
+    print(json.dumps(telnet_data, indent=2))
+else:
+    print("Error: Failed to execute Telnet command")
+print()
+
+# Test 7: Get topology from NetBox
+print("=" * 70)
+print("Test 7: Get Topology from NetBox")
+print("=" * 70)
+print("Note: Using example token - will automatically fall back to sample data.")
+print("      In production, provide a valid NetBox API token.")
+netbox_data = call_tool(proc, "get_topology_from_netbox", {
+    "base_url": "https://netbox.example.com",
+    "token": "your-api-token-here"
+}, request_id)
+request_id += 1
+if netbox_data:
+    if netbox_data.get("success"):
+        stats = netbox_data.get("statistics", {})
+        note = netbox_data.get("note", "")
+        if note:
+            print(f"Note: {note}")
+        print(f"Success: Topology fetched (from {'sample data' if note else 'NetBox API'})")
+        print(f"Devices: {stats.get('total_devices', 0)}")
+        print(f"Interfaces: {stats.get('total_interfaces', 0)}")
+        print(f"Links: {stats.get('total_links', 0)}")
+        if netbox_data.get("devices"):
+            print("\nSample devices (first 3):")
+            for device in netbox_data.get("devices", [])[:3]:
+                print(f"  - {device.get('name')} ({device.get('device_type')})")
+    else:
+        print(f"Error: {netbox_data.get('error', 'Unknown error')}")
+        print("This is expected if NetBox is not accessible or token is invalid.")
+    print("\nFull NetBox result:")
+    print(json.dumps(netbox_data, indent=2))
+else:
+    print("Error: Failed to fetch topology from NetBox")
+print()
+
 # Summary
 print("=" * 70)
 print("Test Summary")
 print("=" * 70)
 print("All tools tested successfully.")
+print("Note: Integration tools (Telnet, NetBox) may show errors if devices/services")
+print("      are not accessible. This is expected in test environments.")
 print()
 
 # Close the process

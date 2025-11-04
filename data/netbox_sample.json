@@ -1,0 +1,98 @@
+{
+  "devices": [
+    {
+      "id": 1,
+      "name": "sonic-leaf-01",
+      "device_type": "AS7326-56X",
+      "manufacturer": "EdgeCore",
+      "site": "Data Center 1",
+      "status": "active",
+      "role": "leaf",
+      "primary_ip": "192.168.1.10/24"
+    },
+    {
+      "id": 2,
+      "name": "sonic-spine-01",
+      "device_type": "DCS-7280SR3",
+      "manufacturer": "Arista",
+      "site": "Data Center 1",
+      "status": "active",
+      "role": "spine",
+      "primary_ip": "192.168.1.20/24"
+    },
+    {
+      "id": 3,
+      "name": "edgecore-switch-01",
+      "device_type": "AS7326-56X",
+      "manufacturer": "EdgeCore",
+      "site": "Data Center 1",
+      "status": "active",
+      "role": "leaf",
+      "primary_ip": "192.168.1.30/24"
+    },
+    {
+      "id": 4,
+      "name": "celtica-ds4000-01",
+      "device_type": "DS4000",
+      "manufacturer": "Celtica",
+      "site": "Data Center 1",
+      "status": "active",
+      "role": "core",
+      "primary_ip": "192.168.1.40/24"
+    },
+    {
+      "id": 5,
+      "name": "nvidia-sn2700-01",
+      "device_type": "SN2700",
+      "manufacturer": "NVIDIA",
+      "site": "Data Center 1",
+      "status": "active",
+      "role": "spine",
+      "primary_ip": "192.168.1.50/24"
+    }
+  ],
+  "links": [
+    {
+      "id": 1,
+      "source_device": "sonic-leaf-01",
+      "source_interface": "Ethernet24",
+      "target_device": "sonic-spine-01",
+      "target_interface": "Ethernet1/1",
+      "status": "connected",
+      "type": "fiber"
+    },
+    {
+      "id": 2,
+      "source_device": "edgecore-switch-01",
+      "source_interface": "Ethernet1",
+      "target_device": "sonic-spine-01",
+      "target_interface": "Ethernet1/2",
+      "status": "connected",
+      "type": "fiber"
+    },
+    {
+      "id": 3,
+      "source_device": "celtica-ds4000-01",
+      "source_interface": "GigabitEthernet0/1",
+      "target_device": "nvidia-sn2700-01",
+      "target_interface": "Ethernet1",
+      "status": "connected",
+      "type": "copper"
+    },
+    {
+      "id": 4,
+      "source_device": "sonic-leaf-01",
+      "source_interface": "Ethernet12",
+      "target_device": "edgecore-switch-01",
+      "target_interface": "Ethernet2",
+      "status": "connected",
+      "type": "fiber"
+    }
+  ],
+  "statistics": {
+    "total_devices": 5,
+    "total_interfaces": 0,
+    "total_links": 4
+  }
+}
+
