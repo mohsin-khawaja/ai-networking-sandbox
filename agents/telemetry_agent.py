@@ -2,16 +2,28 @@
 import random
 from typing import Dict, List
 from utils.logger import setup_logger
+from utils.topology_builder import build_multi_vendor_topology
 
 logger = setup_logger(__name__)
 
 
 def get_port_telemetry() -> dict:
     """
-    Simulate SONiC port telemetry metrics.
+    Simulate SONiC port telemetry metrics collection.
+    
+    Maps to Aviz NCP functionality:
+    - Collects real-time interface statistics from SONiC switches via gNMI or REST APIs
+    - Normalizes telemetry data for consumption by AI/ML models
+    - Supports integration with gNMI telemetry streams for continuous monitoring
+    - In production, this would stream data from actual network devices
     
     Returns:
-        Dictionary containing port telemetry data
+        Dictionary containing port telemetry data:
+        - switch: Device identifier
+        - interface: Interface name
+        - rx_bytes, tx_bytes: Traffic counters
+        - rx_errors, tx_errors: Error counters
+        - utilization: Link utilization percentage (0.0 to 1.0)
     """
     logger.info("Collecting SONiC port telemetry")
     telemetry = {
@@ -31,110 +43,28 @@ def get_network_topology() -> dict:
     """
     Return a mock network topology with multiple device types.
     
-    Simulates a multi-vendor network with SONiC, Cisco, FortiGate, and other devices.
+    Simulates a multi-vendor network with SONiC, Cisco, FortiGate, and EdgeCore devices.
+    This demonstrates Aviz NCP's vendor-agnostic approach to network management.
+    
+    Maps to Aviz NCP functionality:
+    - Aggregates topology data from multiple vendor APIs
+    - Normalizes device and link information
+    - Provides unified view of network infrastructure
     
     Returns:
         Dictionary containing network topology with devices, links, and metadata
     """
-    logger.info("Generating network topology")
-    topology = {
-        "timestamp": "2024-01-15T10:30:00Z",
-        "devices": [
-            {
-                "id": "sonic-leaf-01",
-                "type": "SONiC",
-                "vendor": "Dell",
-                "model": "S5248F-ON",
-                "role": "leaf",
-                "status": "active",
-                "interfaces": [
-                    {"name": "Ethernet12", "status": "up", "speed": "25G"},
-                    {"name": "Ethernet24", "status": "up", "speed": "100G"}
-                ]
-            },
-            {
-                "id": "sonic-spine-01",
-                "type": "SONiC",
-                "vendor": "Arista",
-                "model": "DCS-7280SR3",
-                "role": "spine",
-                "status": "active",
-                "interfaces": [
-                    {"name": "Ethernet1/1", "status": "up", "speed": "100G"},
-                    {"name": "Ethernet1/2", "status": "up", "speed": "100G"}
-                ]
-            },
-            {
-                "id": "cisco-core-01",
-                "type": "Cisco",
-                "vendor": "Cisco",
-                "model": "Nexus 9000",
-                "role": "core",
-                "status": "active",
-                "interfaces": [
-                    {"name": "GigabitEthernet0/1", "status": "up", "speed": "10G"},
-                    {"name": "GigabitEthernet0/2", "status": "up", "speed": "10G"}
-                ]
-            },
-            {
-                "id": "fortigate-fw-01",
-                "type": "FortiGate",
-                "vendor": "Fortinet",
-                "model": "FortiGate 100F",
-                "role": "firewall",
-                "status": "active",
-                "interfaces": [
-                    {"name": "port1", "status": "up", "speed": "1G"},
-                    {"name": "port2", "status": "up", "speed": "1G"}
-                ]
-            },
-            {
-                "id": "arista-leaf-02",
-                "type": "EOS",
-                "vendor": "Arista",
-                "model": "DCS-7050TX3",
-                "role": "leaf",
-                "status": "active",
-                "interfaces": [
-                    {"name": "Ethernet1", "status": "up", "speed": "10G"},
-                    {"name": "Ethernet2", "status": "up", "speed": "10G"}
-                ]
-            }
-        ],
-        "links": [
-            {
-                "source": "sonic-leaf-01",
-                "source_port": "Ethernet24",
-                "target": "sonic-spine-01",
-                "target_port": "Ethernet1/1",
-                "bandwidth": "100G",
-                "status": "up"
-            },
-            {
-                "source": "cisco-core-01",
-                "source_port": "GigabitEthernet0/1",
-                "target": "sonic-spine-01",
-                "target_port": "Ethernet1/2",
-                "bandwidth": "10G",
-                "status": "up"
-            },
-            {
-                "source": "fortigate-fw-01",
-                "source_port": "port1",
-                "target": "cisco-core-01",
-                "target_port": "GigabitEthernet0/2",
-                "bandwidth": "1G",
-                "status": "up"
-            }
-        ],
-        "statistics": {
-            "total_devices": 5,
-            "sonic_devices": 2,
-            "non_sonic_devices": 3,
-            "total_links": 3,
-            "active_links": 3
+    try:
+        topology = build_multi_vendor_topology()
+        logger.info(f"Topology generated: {topology['statistics']['total_devices']} devices, {topology['statistics']['total_links']} links")
+        return topology
+    except Exception as e:
+        logger.error(f"Error generating topology: {e}")
+        return {
+            "error": "Failed to generate topology",
+            "message": str(e),
+            "devices": [],
+            "links": [],
+            "statistics": {}
         }
-    }
-    logger.debug(f"Topology generated with {topology['statistics']['total_devices']} devices")
-    return topology
 

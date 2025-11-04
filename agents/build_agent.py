@@ -1,8 +1,8 @@
 """Build validation agent for validating SONiC and non-SONiC build metadata."""
-import json
 import os
 from typing import Dict, List
 from utils.logger import setup_logger
+from utils.file_loader import load_build_json
 
 logger = setup_logger(__name__)
 
@@ -12,13 +12,25 @@ def validate_build_metadata(build_json_path: str) -> dict:
     Validate SONiC or non-SONiC build JSON files.
     
     This function checks build metadata files for required fields and structure.
-    Supports both SONiC and non-SONiC device builds.
+    Supports both SONiC and non-SONiC device builds with different validation rules.
+    
+    Maps to Aviz NCP functionality:
+    - Validates build metadata before deployment to prevent incompatible builds
+    - Ensures version, hardware, and feature consistency across deployments
+    - Prevents deployment of misconfigured or incompatible builds
+    - Supports vendor-agnostic build validation workflows
+    - In production, this integrates with CI/CD pipelines for automated validation
     
     Args:
-        build_json_path: Path to the build JSON file
+        build_json_path: Path to the build JSON file (can be relative to data/builds/)
         
     Returns:
-        Dictionary containing validation results, errors, and warnings
+        Dictionary containing:
+        - valid: Boolean indicating if validation passed
+        - device_type: "SONiC" or "non-SONiC"
+        - errors: List of validation errors (if any)
+        - warnings: List of warnings (missing recommended fields)
+        - metadata: The parsed build metadata
     """
     logger.info(f"Validating build metadata: {build_json_path}")
     
@@ -30,23 +42,11 @@ def validate_build_metadata(build_json_path: str) -> dict:
         "metadata": {}
     }
     
-    # Check if file exists
-    if not os.path.exists(build_json_path):
-        result["errors"].append(f"File not found: {build_json_path}")
-        logger.error(f"Build file not found: {build_json_path}")
-        return result
-    
-    # Try to load and parse JSON
-    try:
-        with open(build_json_path, 'r') as f:
-            build_data = json.load(f)
-    except json.JSONDecodeError as e:
-        result["errors"].append(f"Invalid JSON: {str(e)}")
-        logger.error(f"JSON decode error: {e}")
-        return result
-    except Exception as e:
-        result["errors"].append(f"Error reading file: {str(e)}")
-        logger.error(f"File read error: {e}")
+    # Load build JSON using file loader utility
+    build_data = load_build_json(build_json_path)
+    if build_data is None:
+        result["errors"].append(f"Failed to load build file: {build_json_path}")
+        logger.error(f"Build file load failed: {build_json_path}")
         return result
     
     # Determine device type

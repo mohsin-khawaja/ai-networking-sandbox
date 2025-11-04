@@ -1,0 +1,10 @@
+{
+  "vendor": "Cisco",
+  "model": "Nexus 9000",
+  "os_version": "9.3(7)",
+  "firmware_version": "7.0(3)I7(8)",
+  "serial_number": "FDO1234ABCD",
+  "mac_address": "00:1e:13:dd:ee:ff",
+  "hostname": "cisco-core-01"
+}
+

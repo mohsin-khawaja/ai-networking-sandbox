@@ -1,0 +1,10 @@
+{
+  "vendor": "EdgeCore",
+  "model": "AS7326-56X",
+  "os_version": "SONiC.202205",
+  "firmware_version": "1.0.0",
+  "serial_number": "EC789012345",
+  "mac_address": "00:2a:6a:ff:ee:dd",
+  "hostname": "edgecore-spine-02"
+}
+
