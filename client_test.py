@@ -251,9 +251,37 @@ else:
     print("Error: Failed to fetch topology from NetBox")
 print()
 
-# Test 8: Validate system health
+# Test 8: Get device and interface report (NetBox + Telnet)
 print("=" * 70)
-print("Test 8: Validate System Health (AI ONE Center Style)")
+print("Test 8: Get Device and Interface Report (NetBox + Telnet)")
+print("=" * 70)
+print("Note: This combines NetBox device inventory with Telnet interface data.")
+print("      Uses demo.netbox.dev API and .env credentials if available.")
+report_data = call_tool(proc, "get_device_and_interface_report", {}, request_id)
+request_id += 1
+if report_data:
+    print(f"NetBox Status: {report_data.get('NetBox_Status', 'Unknown')}")
+    print(f"Telnet Status: {report_data.get('Telnet_Status', 'Unknown')}")
+    if report_data.get("NetBox_Devices"):
+        print(f"\nNetBox Devices ({len(report_data['NetBox_Devices'])}):")
+        for device in report_data["NetBox_Devices"][:5]:
+            print(f"  - {device}")
+        if len(report_data["NetBox_Devices"]) > 5:
+            print(f"  ... and {len(report_data['NetBox_Devices']) - 5} more")
+    if report_data.get("Telnet_Output"):
+        print(f"\nTelnet Output (first 500 chars):")
+        print(report_data["Telnet_Output"])
+    if report_data.get("error"):
+        print(f"\nError: {report_data['error']}")
+    print("\nFull report:")
+    print(json.dumps(report_data, indent=2))
+else:
+    print("Error: Failed to generate device and interface report")
+print()
+
+# Test 9: Validate system health
+print("=" * 70)
+print("Test 9: Validate System Health (AI ONE Center Style)")
 print("=" * 70)
 print("Note: This performs comprehensive system validation similar to AI ONE Center POC.")
 health_data = call_tool(proc, "validate_system_health", {}, request_id)
@@ -290,6 +318,7 @@ print("=" * 70)
 print("All tools tested successfully.")
 print("Note: Integration tools (Telnet, NetBox) may show errors if devices/services")
 print("      are not accessible. This is expected in test environments.")
+print("      Configure .env file for Telnet credentials if needed.")
 print()
 
 # Close the process

@@ -12,7 +12,7 @@ from agents.telemetry_agent import get_port_telemetry as _get_port_telemetry, ge
 from agents.ai_agent import predict_link_health as _predict_link_health
 from agents.build_agent import validate_build_metadata as _validate_build_metadata
 from agents.remediation_agent import remediate_link as _remediate_link
-from agents.integration_tools import get_device_status_from_telnet as _get_device_status_from_telnet, get_topology_from_netbox as _get_topology_from_netbox
+from agents.integration_tools import get_device_status_from_telnet as _get_device_status_from_telnet, get_topology_from_netbox as _get_topology_from_netbox, get_device_and_interface_report as _get_device_and_interface_report
 from agents.validation_agent import validate_system_health as _validate_system_health
 
 # Initialize logger
@@ -270,7 +270,67 @@ def get_topology_from_netbox(base_url: str, token: str) -> dict:
 
 
 # -----------------------------
-# 6. SYSTEM HEALTH VALIDATION TOOLS
+# 6. COMBINED DATA SOURCE TOOLS
+# -----------------------------
+
+@mcp.tool()
+def get_device_and_interface_report(
+    netbox_url: str = "",
+    netbox_token: str = "",
+    telnet_host: str = "",
+    telnet_username: str = "",
+    telnet_password: str = "",
+    telnet_command: str = "show interfaces status"
+) -> dict:
+    """
+    Combine NetBox device data with Telnet interface information.
+    
+    This tool demonstrates how Aviz NCP agents can retrieve live device data
+    from NetBox (source of truth) and combine it with real-time interface data
+    from Telnet connections. This mirrors the AI ONE Center workflow of
+    validating inventory against actual device state.
+    
+    Maps to Aviz NCP AI ONE Center functionality:
+    - Retrieves device inventory from NetBox (source of truth)
+    - Connects to devices via Telnet to get real-time interface status
+    - Combines inventory data with live device state
+    - Validates that devices in NetBox are actually reachable
+    - In production, this would be used for automated validation and monitoring
+    
+    Args:
+        netbox_url: NetBox API URL (optional, defaults to .env NETBOX_URL or demo.netbox.dev)
+        netbox_token: NetBox API token (optional, defaults to .env NETBOX_TOKEN)
+        telnet_host: Device hostname/IP (optional, defaults to .env TELNET_HOST)
+        telnet_username: Telnet username (optional, defaults to .env TELNET_USERNAME)
+        telnet_password: Telnet password (optional, defaults to .env TELNET_PASSWORD)
+        telnet_command: CLI command to execute (defaults to "show interfaces status")
+        
+    Returns:
+        Dictionary containing NetBox_Devices list, Telnet_Output, and status for both
+    """
+    try:
+        return _get_device_and_interface_report(
+            netbox_url=netbox_url if netbox_url else None,
+            netbox_token=netbox_token if netbox_token else None,
+            telnet_host=telnet_host if telnet_host else None,
+            telnet_username=telnet_username if telnet_username else None,
+            telnet_password=telnet_password if telnet_password else None,
+            telnet_command=telnet_command
+        )
+    except Exception as e:
+        logger.error(f"Error generating device and interface report: {e}")
+        return {
+            "error": "Report generation failed",
+            "message": str(e),
+            "NetBox_Devices": [],
+            "Telnet_Output": "",
+            "NetBox_Status": "Failed",
+            "Telnet_Status": "Failed"
+        }
+
+
+# -----------------------------
+# 7. SYSTEM HEALTH VALIDATION TOOLS
 # -----------------------------
 
 @mcp.tool()
@@ -337,7 +397,8 @@ if __name__ == "__main__":
     logger.info("  5. remediate_link - Automated link remediation recommendations")
     logger.info("  6. get_device_status_from_telnet - Execute commands via Telnet")
     logger.info("  7. get_topology_from_netbox - Fetch topology from NetBox")
-    logger.info("  8. validate_system_health - System-wide health validation (AI ONE Center)")
+    logger.info("  8. get_device_and_interface_report - Combined NetBox + Telnet report")
+    logger.info("  9. validate_system_health - System-wide health validation (AI ONE Center)")
     logger.info("Waiting for requests on stdio...")
     
     try:

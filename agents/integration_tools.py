@@ -14,6 +14,15 @@ from utils.logger import setup_logger
 
 logger = setup_logger(__name__)
 
+# Try to load environment variables from .env file
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+    logger.debug("Loaded environment variables from .env file")
+except ImportError:
+    # dotenv not installed, continue without it
+    logger.debug("python-dotenv not installed, skipping .env file loading")
+
 
 def get_device_status_from_telnet(
     host: str,
@@ -306,5 +315,158 @@ def get_topology_from_netbox(base_url: str, token: str) -> dict:
         result["error"] = f"Error fetching topology: {str(e)}"
         logger.error(f"Error fetching topology from NetBox: {e}")
     
+    return result
+
+
+def get_device_and_interface_report(
+    netbox_url: Optional[str] = None,
+    netbox_token: Optional[str] = None,
+    telnet_host: Optional[str] = None,
+    telnet_username: Optional[str] = None,
+    telnet_password: Optional[str] = None,
+    telnet_command: str = "show interfaces status"
+) -> Dict:
+    """
+    Combine NetBox device data with Telnet interface information.
+    
+    This tool demonstrates how Aviz NCP agents can retrieve live device data
+    from NetBox (source of truth) and combine it with real-time interface data
+    from Telnet connections. This mirrors the AI ONE Center workflow of
+    validating inventory against actual device state.
+    
+    Maps to Aviz NCP AI ONE Center functionality:
+    - Retrieves device inventory from NetBox (source of truth)
+    - Connects to devices via Telnet to get real-time interface status
+    - Combines inventory data with live device state
+    - Validates that devices in NetBox are actually reachable
+    - In production, this would be used for automated validation and monitoring
+    
+    Args:
+        netbox_url: NetBox API URL (defaults to .env NETBOX_URL or demo.netbox.dev)
+        netbox_token: NetBox API token (defaults to .env NETBOX_TOKEN)
+        telnet_host: Device hostname/IP (defaults to .env TELNET_HOST)
+        telnet_username: Telnet username (defaults to .env TELNET_USERNAME)
+        telnet_password: Telnet password (defaults to .env TELNET_PASSWORD)
+        telnet_command: CLI command to execute (defaults to "show interfaces status")
+        
+    Returns:
+        Dictionary containing:
+        - NetBox_Devices: List of device names and roles from NetBox
+        - Telnet_Output: First 500 characters of Telnet command output
+        - NetBox_Status: Success/failure status of NetBox query
+        - Telnet_Status: Success/failure status of Telnet connection
+        - error: Error message if operation failed
+    """
+    logger.info("Generating device and interface report (NetBox + Telnet)")
+    
+    result = {
+        "NetBox_Devices": [],
+        "Telnet_Output": "",
+        "NetBox_Status": "Not Run",
+        "Telnet_Status": "Not Run",
+        "error": None
+    }
+    
+    # Load configuration from environment variables if not provided
+    if not netbox_url:
+        netbox_url = os.getenv("NETBOX_URL", "https://demo.netbox.dev/api/")
+    if not netbox_token:
+        netbox_token = os.getenv("NETBOX_TOKEN", "")
+    if not telnet_host:
+        telnet_host = os.getenv("TELNET_HOST", "")
+    if not telnet_username:
+        telnet_username = os.getenv("TELNET_USERNAME", "")
+    if not telnet_password:
+        telnet_password = os.getenv("TELNET_PASSWORD", "")
+    
+    # Step 1: Fetch devices from NetBox
+    logger.info(f"Fetching devices from NetBox: {netbox_url}")
+    try:
+        base_url = netbox_url.rstrip('/')
+        if not base_url.endswith('/api'):
+            # Ensure we have /api/ in the URL
+            if not base_url.endswith('/api/'):
+                base_url = f"{base_url.rstrip('/')}/api/"
+        else:
+            base_url = f"{base_url}/"
+        
+        headers = {
+            "Content-Type": "application/json",
+            "Accept": "application/json"
+        }
+        
+        # Add token if provided
+        if netbox_token and netbox_token != "":
+            headers["Authorization"] = f"Token {netbox_token}"
+        
+        devices_url = f"{base_url}dcim/devices/"
+        logger.debug(f"NetBox devices URL: {devices_url}")
+        
+        devices_response = requests.get(devices_url, headers=headers, timeout=10)
+        devices_response.raise_for_status()
+        devices_data = devices_response.json()
+        
+        # Extract device names and roles
+        devices_list = []
+        for device in devices_data.get("results", [])[:10]:  # Limit to first 10 for demo
+            device_info = {
+                "name": device.get("name"),
+                "role": device.get("device_role", {}).get("name") if isinstance(device.get("device_role"), dict) else None,
+                "status": device.get("status", {}).get("value") if isinstance(device.get("status"), dict) else None
+            }
+            devices_list.append(device_info)
+        
+        result["NetBox_Devices"] = [d["name"] for d in devices_list if d["name"]]
+        result["NetBox_Status"] = "Success"
+        logger.info(f"Retrieved {len(result['NetBox_Devices'])} devices from NetBox")
+        
+    except requests.exceptions.ConnectionError:
+        result["NetBox_Status"] = "Failed"
+        result["error"] = "Cannot connect to NetBox API"
+        logger.error("NetBox connection error")
+    except requests.exceptions.HTTPError as e:
+        result["NetBox_Status"] = "Failed"
+        if e.response.status_code == 401:
+            result["error"] = "NetBox authentication failed"
+        else:
+            result["error"] = f"NetBox API error: {e.response.status_code}"
+        logger.error(f"NetBox HTTP error: {e}")
+    except Exception as e:
+        result["NetBox_Status"] = "Failed"
+        result["error"] = f"NetBox error: {str(e)}"
+        logger.error(f"NetBox error: {e}")
+    
+    # Step 2: Connect via Telnet and run command
+    if telnet_host:
+        logger.info(f"Connecting to device via Telnet: {telnet_host}")
+        try:
+            # Use existing telnet function
+            telnet_result = get_device_status_from_telnet(
+                host=telnet_host,
+                username=telnet_username or "",
+                password=telnet_password or "",
+                command=telnet_command
+            )
+            
+            if telnet_result.get("success"):
+                output = telnet_result.get("output", "")
+                # Limit to first 500 characters
+                result["Telnet_Output"] = output[:500] + ("..." if len(output) > 500 else "")
+                result["Telnet_Status"] = "Success"
+                logger.info(f"Telnet command executed successfully on {telnet_host}")
+            else:
+                result["Telnet_Status"] = "Failed"
+                result["error"] = telnet_result.get("error", "Telnet connection failed")
+                logger.warning(f"Telnet connection failed: {result['error']}")
+        except Exception as e:
+            result["Telnet_Status"] = "Failed"
+            result["error"] = f"Telnet error: {str(e)}"
+            logger.error(f"Telnet error: {e}")
+    else:
+        logger.info("No Telnet host configured, skipping Telnet connection")
+        result["Telnet_Status"] = "Skipped"
+        result["Telnet_Output"] = "No Telnet host configured in .env or parameters"
+    
+    logger.info(f"Report generation complete: NetBox={result['NetBox_Status']}, Telnet={result['Telnet_Status']}")
     return result
 

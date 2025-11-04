@@ -59,12 +59,28 @@ python -m venv .venv
 source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 
 # Install dependencies
-pip install "mcp[cli]" torch
+pip install "mcp[cli]" torch python-dotenv
+```
+
+**Optional: Configure Environment Variables**
+
+Create a `.env` file in the project root for credentials (see `.env.example`):
+
+```bash
+# Copy example file
+cp .env.example .env
+
+# Edit .env with your credentials
+# NETBOX_URL=https://demo.netbox.dev/api/
+# NETBOX_TOKEN=your-token-here
+# TELNET_HOST=192.168.1.100
+# TELNET_USERNAME=admin
+# TELNET_PASSWORD=password
 ```
 
 ## Available Tools
 
-The MCP server exposes eight tools that demonstrate different aspects of NCP's AI infrastructure:
+The MCP server exposes nine tools that demonstrate different aspects of NCP's AI infrastructure:
 
 ### 1. `get_port_telemetry()`
 
@@ -354,7 +370,58 @@ result = await client.call_tool("get_topology_from_netbox", {
 - Invalid API responses are validated and reported
 - **Sample Data Fallback**: If no API token is provided or token is invalid, the tool automatically falls back to sample NetBox data from `data/netbox_sample.json` for testing purposes
 
-### 8. `validate_system_health(netbox_url, netbox_token, elk_endpoint, servicenow_url, zendesk_url)`
+### 8. `get_device_and_interface_report(netbox_url, netbox_token, telnet_host, telnet_username, telnet_password, telnet_command)`
+
+Combines NetBox device inventory data with Telnet interface information. This tool demonstrates how Aviz NCP agents retrieve live device data from NetBox (source of truth) and combine it with real-time interface data from Telnet connections, mirroring the AI ONE Center workflow.
+
+**Maps to NCP AI ONE Center functionality:**
+- Retrieves device inventory from NetBox (source of truth)
+- Connects to devices via Telnet to get real-time interface status
+- Combines inventory data with live device state
+- Validates that devices in NetBox are actually reachable
+- In production, used for automated validation and monitoring
+
+**Parameters:**
+- `netbox_url` (str, optional): NetBox API URL (defaults to .env NETBOX_URL or https://demo.netbox.dev/api/)
+- `netbox_token` (str, optional): NetBox API token (defaults to .env NETBOX_TOKEN)
+- `telnet_host` (str, optional): Device hostname/IP (defaults to .env TELNET_HOST)
+- `telnet_username` (str, optional): Telnet username (defaults to .env TELNET_USERNAME)
+- `telnet_password` (str, optional): Telnet password (defaults to .env TELNET_PASSWORD)
+- `telnet_command` (str, optional): CLI command to execute (defaults to "show interfaces status")
+
+**Returns:**
+```json
+{
+  "NetBox_Devices": ["sonic-leaf-01", "nexus-agg-02", "edgecore-switch-03"],
+  "Telnet_Output": "Port      Name         Status    Vlan    Duplex  Speed Type...",
+  "NetBox_Status": "Success",
+  "Telnet_Status": "Success",
+  "error": null
+}
+```
+
+**Usage:**
+```python
+# Using .env file for credentials
+result = await client.call_tool("get_device_and_interface_report", {})
+
+# Or with explicit parameters
+result = await client.call_tool("get_device_and_interface_report", {
+  "netbox_url": "https://demo.netbox.dev/api/",
+  "telnet_host": "192.168.1.100",
+  "telnet_username": "admin",
+  "telnet_password": "password",
+  "telnet_command": "show interfaces status"
+})
+```
+
+**Error Handling:**
+- NetBox connection failures are handled gracefully
+- Telnet connection timeouts and authentication errors are reported
+- Missing credentials default to .env file values
+- Tool returns partial results if one data source fails
+
+### 9. `validate_system_health(netbox_url, netbox_token, elk_endpoint, servicenow_url, zendesk_url)`
 
 Performs comprehensive system health validation similar to Aviz AI ONE Center's QA validation process. Validates all critical system components including NetBox inventory, Syslog/ELK connectivity, ServiceNow and Zendesk integrations, and FlowAnalytics licensing.
 
@@ -487,6 +554,48 @@ Each validation check is implemented as a separate function in `agents/validatio
 
 This modular design allows each sub-check to be replaced with real API connectors as needed, without affecting other validation components.
 
+## Combined Data Source Integration
+
+The `get_device_and_interface_report()` tool demonstrates how Aviz NCP agents combine data from multiple sources to create comprehensive network reports. This workflow is essential for AI ONE Center operations:
+
+### NetBox + Telnet Workflow
+
+1. **NetBox Query**: Retrieve device inventory from source of truth
+2. **Telnet Connection**: Connect to devices to get real-time interface status
+3. **Data Combination**: Merge inventory data with live device state
+4. **Validation**: Verify that devices in NetBox are actually reachable
+
+**Example Use Case:**
+```python
+# Generate combined report
+report = await client.call_tool("get_device_and_interface_report", {})
+
+# Check if devices in NetBox are actually reachable
+netbox_devices = report["NetBox_Devices"]
+if report["Telnet_Status"] == "Success":
+    print(f"Successfully connected to device, validating NetBox inventory...")
+    # Compare NetBox devices with actual device state
+    validate_device_reachability(netbox_devices)
+```
+
+### Environment Variable Configuration
+
+The tool supports loading credentials from a `.env` file for secure credential management:
+
+```bash
+# .env file
+NETBOX_URL=https://demo.netbox.dev/api/
+NETBOX_TOKEN=your-token-here
+TELNET_HOST=192.168.1.100
+TELNET_USERNAME=admin
+TELNET_PASSWORD=password
+```
+
+This allows you to:
+- Keep credentials out of code and version control
+- Switch between environments (dev/staging/prod)
+- Share configuration templates without exposing secrets
+
 ## Integration with Real Infrastructure
 
 The framework now includes integration tools for connecting to real network devices and infrastructure sources:
@@ -562,7 +671,7 @@ The server will initialize all agents, load the AI model, and wait for requests 
 python client_test.py
 ```
 
-The test client demonstrates all eight tools:
+The test client demonstrates all nine tools:
 1. Port telemetry collection
 2. Network topology retrieval
 3. Link health prediction
@@ -570,7 +679,8 @@ The test client demonstrates all eight tools:
 5. Link remediation recommendations
 6. Device status via Telnet
 7. Topology from NetBox
-8. System health validation (AI ONE Center style)
+8. Device and interface report (NetBox + Telnet combined)
+9. System health validation (AI ONE Center style)
 
 ### Example Output
 

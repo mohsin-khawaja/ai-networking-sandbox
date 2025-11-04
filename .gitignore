@@ -30,3 +30,8 @@ Thumbs.db
 # Sample data (optional - uncomment if you don't want to track sample builds)
 # sample_builds/
 
+# Environment variables
+.env
+.env.local
+.env.*.local
+
