@@ -13,6 +13,7 @@ from agents.ai_agent import predict_link_health as _predict_link_health
 from agents.build_agent import validate_build_metadata as _validate_build_metadata
 from agents.remediation_agent import remediate_link as _remediate_link
 from agents.integration_tools import get_device_status_from_telnet as _get_device_status_from_telnet, get_topology_from_netbox as _get_topology_from_netbox
+from agents.validation_agent import validate_system_health as _validate_system_health
 
 # Initialize logger
 logger = setup_logger(__name__)
@@ -56,13 +57,9 @@ def get_network_topology() -> dict:
     
     Simulates a multi-vendor network with SONiC, Cisco, FortiGate, and EdgeCore devices.
     This demonstrates Aviz NCP's vendor-agnostic approach to network management.
-    
-    Maps to Aviz NCP functionality:
-    - Aggregates topology data from multiple vendor APIs
     - Normalizes device and link information across vendors
     - Provides unified view of network infrastructure
     - Supports both SONiC (~5%) and non-SONiC devices (~95%)
-    
     Returns:
         Dictionary containing network topology with devices, links, and statistics
     """
@@ -273,6 +270,61 @@ def get_topology_from_netbox(base_url: str, token: str) -> dict:
 
 
 # -----------------------------
+# 6. SYSTEM HEALTH VALIDATION TOOLS
+# -----------------------------
+
+@mcp.tool()
+def validate_system_health(
+    netbox_url: str = "https://netbox.example.com",
+    netbox_token: str = "",
+    elk_endpoint: str = "http://elk.example.com:9200",
+    servicenow_url: str = "https://example.service-now.com",
+    zendesk_url: str = "https://example.zendesk.com/api/v2"
+) -> dict:
+    """
+    Perform comprehensive system health validation.
+    
+    This tool mirrors the AI ONE Center's QA validation process by checking
+    all critical system components for health and consistency.
+    
+    Maps to Aviz NCP AI ONE Center functionality:
+    - Validates NetBox inventory consistency and device counts
+    - Checks Syslog/ELK connector health and connectivity
+    - Verifies ServiceNow integration accessibility
+    - Validates Zendesk integration status
+    - Checks FlowAnalytics license availability
+    - Returns structured summary similar to AI ONE Center reports
+    - Can be extended to automatically open JIRA tickets on failures
+    
+    Args:
+        netbox_url: NetBox instance URL (optional, defaults to example URL)
+        netbox_token: NetBox API token (optional, uses sample data if not provided)
+        elk_endpoint: ELK/Syslog endpoint URL (optional)
+        servicenow_url: ServiceNow instance URL (optional)
+        zendesk_url: Zendesk API URL (optional)
+        
+    Returns:
+        Dictionary containing validation results for each component with status
+        (Passed/Failed/Not Run) and details, plus a Total summary
+    """
+    try:
+        return _validate_system_health(
+            netbox_url=netbox_url,
+            netbox_token=netbox_token,
+            elk_endpoint=elk_endpoint,
+            servicenow_url=servicenow_url,
+            zendesk_url=zendesk_url
+        )
+    except Exception as e:
+        logger.error(f"Error performing system health validation: {e}")
+        return {
+            "error": "System health validation failed",
+            "message": str(e),
+            "Total": {"Passed": 0, "Failed": 1, "NotRun": 0}
+        }
+
+
+# -----------------------------
 # ENTRY POINT
 # -----------------------------
 if __name__ == "__main__":
@@ -285,6 +337,7 @@ if __name__ == "__main__":
     logger.info("  5. remediate_link - Automated link remediation recommendations")
     logger.info("  6. get_device_status_from_telnet - Execute commands via Telnet")
     logger.info("  7. get_topology_from_netbox - Fetch topology from NetBox")
+    logger.info("  8. validate_system_health - System-wide health validation (AI ONE Center)")
     logger.info("Waiting for requests on stdio...")
     
     try:

@@ -24,7 +24,8 @@ aviz_agents/
 │   ├── ai_agent.py             # ML-based health prediction
 │   ├── build_agent.py          # Build metadata validation
 │   ├── remediation_agent.py   # Automated remediation
-│   └── integration_tools.py    # Telnet and NetBox integration
+│   ├── integration_tools.py    # Telnet and NetBox integration
+│   └── validation_agent.py     # System health validation (AI ONE Center)
 ├── data/                       # Data files
 │   ├── builds/                 # Build JSON samples (SONiC, Cisco, EdgeCore)
 │   └── netbox_sample.json      # Sample NetBox topology data
@@ -63,7 +64,7 @@ pip install "mcp[cli]" torch
 
 ## Available Tools
 
-The MCP server exposes seven tools that demonstrate different aspects of NCP's AI infrastructure:
+The MCP server exposes eight tools that demonstrate different aspects of NCP's AI infrastructure:
 
 ### 1. `get_port_telemetry()`
 
@@ -353,6 +354,139 @@ result = await client.call_tool("get_topology_from_netbox", {
 - Invalid API responses are validated and reported
 - **Sample Data Fallback**: If no API token is provided or token is invalid, the tool automatically falls back to sample NetBox data from `data/netbox_sample.json` for testing purposes
 
+### 8. `validate_system_health(netbox_url, netbox_token, elk_endpoint, servicenow_url, zendesk_url)`
+
+Performs comprehensive system health validation similar to Aviz AI ONE Center's QA validation process. Validates all critical system components including NetBox inventory, Syslog/ELK connectivity, ServiceNow and Zendesk integrations, and FlowAnalytics licensing.
+
+**Maps to NCP AI ONE Center functionality:**
+- Validates NetBox inventory consistency and device counts
+- Checks Syslog/ELK connector health and connectivity
+- Verifies ServiceNow integration accessibility
+- Validates Zendesk integration status
+- Checks FlowAnalytics license availability
+- Returns structured summary similar to AI ONE Center reports
+- Can be extended to automatically open JIRA tickets on failures
+
+**Parameters:**
+- `netbox_url` (str, optional): NetBox instance URL
+- `netbox_token` (str, optional): NetBox API token (uses sample data if not provided)
+- `elk_endpoint` (str, optional): ELK/Syslog endpoint URL
+- `servicenow_url` (str, optional): ServiceNow instance URL
+- `zendesk_url` (str, optional): Zendesk API URL
+
+**Returns:**
+```json
+{
+  "NetBox": {
+    "status": "Failed",
+    "details": "Device count mismatch: found 18, expected 23"
+  },
+  "Syslog": {
+    "status": "Failed",
+    "details": "ELK connector crashed intermittently - service unavailable"
+  },
+  "ServiceNow": {
+    "status": "Passed",
+    "details": "ServiceNow API accessible"
+  },
+  "Zendesk": {
+    "status": "Passed",
+    "details": "Zendesk API accessible"
+  },
+  "FlowAnalytics": {
+    "status": "Not Run",
+    "details": "FlowAnalytics license missing - validation skipped",
+    "reason": "missing license"
+  },
+  "Total": {
+    "Passed": 2,
+    "Failed": 2,
+    "NotRun": 1
+  }
+}
+```
+
+**Usage:**
+```python
+result = await client.call_tool("validate_system_health", {
+  "netbox_url": "https://netbox.example.com",
+  "netbox_token": "your-token-here",
+  "elk_endpoint": "http://elk.example.com:9200"
+})
+```
+
+**Error Handling:**
+- Each component validation is independent and isolated
+- Connection failures are handled gracefully
+- Missing licenses or data sources return "Not Run" status
+- All failures include detailed error messages
+
+## System Health Validation (AI ONE Center Style)
+
+The `validate_system_health()` tool mirrors the validation process used in Aviz AI ONE Center POC. This tool performs comprehensive system-wide validation checks similar to the QA process that identifies common failure points in production environments.
+
+### Common Failure Points Detected
+
+The validation tool checks for typical issues found in AI ONE Center deployments:
+
+1. **NetBox Inventory Issues:**
+   - Device count mismatches (e.g., inventory shows 18/23 devices)
+   - Missing critical devices
+   - Naming inconsistencies
+   - Incomplete inventory data
+
+2. **Syslog/ELK Connector Issues:**
+   - ELK connector crashing intermittently
+   - Connection timeouts
+   - Service unavailability
+
+3. **Data Source Integration Issues:**
+   - ServiceNow API connectivity problems
+   - Zendesk authentication failures
+   - Missing or outdated data sources
+
+4. **Licensing Issues:**
+   - FlowAnalytics license missing or invalid
+   - License expiration
+
+5. **Data Quality Issues:**
+   - Inventory Insight showing IP instead of MAC addresses
+   - Missing metadata leading to "Not Run" test cases
+
+### Integration with JIRA
+
+The validation tool is designed to be extended with automatic JIRA ticket creation on failures. In production, this would:
+
+- Create JIRA tickets for each failed component
+- Include detailed error messages and context
+- Assign tickets to appropriate teams
+- Track resolution status
+
+**Example Extension:**
+```python
+# Future enhancement: Automatic JIRA ticket creation
+if health_result["Total"]["Failed"] > 0:
+    for component, result in health_result.items():
+        if result.get("status") == "Failed":
+            create_jira_ticket(
+                title=f"System Health: {component} Validation Failed",
+                description=result.get("details"),
+                assignee="ops-team"
+            )
+```
+
+### Modular Design
+
+Each validation check is implemented as a separate function in `agents/validation_agent.py`:
+
+- `validate_netbox()` - NetBox inventory validation
+- `validate_syslog()` - ELK/Syslog connectivity check
+- `validate_servicenow()` - ServiceNow integration check
+- `validate_zendesk()` - Zendesk integration check
+- `validate_flowanalytics()` - FlowAnalytics license check
+
+This modular design allows each sub-check to be replaced with real API connectors as needed, without affecting other validation components.
+
 ## Integration with Real Infrastructure
 
 The framework now includes integration tools for connecting to real network devices and infrastructure sources:
@@ -428,7 +562,7 @@ The server will initialize all agents, load the AI model, and wait for requests 
 python client_test.py
 ```
 
-The test client demonstrates all seven tools:
+The test client demonstrates all eight tools:
 1. Port telemetry collection
 2. Network topology retrieval
 3. Link health prediction
@@ -436,6 +570,7 @@ The test client demonstrates all seven tools:
 5. Link remediation recommendations
 6. Device status via Telnet
 7. Topology from NetBox
+8. System health validation (AI ONE Center style)
 
 ### Example Output
 
@@ -577,6 +712,7 @@ Each agent module is self-contained and testable:
 - **`agents/build_agent.py`**: Validates build metadata for SONiC and non-SONiC devices
 - **`agents/remediation_agent.py`**: Provides automated remediation recommendations
 - **`agents/integration_tools.py`**: Integration tools for Telnet and NetBox connectivity
+- **`agents/validation_agent.py`**: System health validation similar to AI ONE Center QA checks
 
 ### Utilities
 

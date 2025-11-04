@@ -251,6 +251,38 @@ else:
     print("Error: Failed to fetch topology from NetBox")
 print()
 
+# Test 8: Validate system health
+print("=" * 70)
+print("Test 8: Validate System Health (AI ONE Center Style)")
+print("=" * 70)
+print("Note: This performs comprehensive system validation similar to AI ONE Center POC.")
+health_data = call_tool(proc, "validate_system_health", {}, request_id)
+request_id += 1
+if health_data:
+    if "Total" in health_data:
+        total = health_data["Total"]
+        print(f"Validation Summary:")
+        print(f"  Passed: {total.get('Passed', 0)}")
+        print(f"  Failed: {total.get('Failed', 0)}")
+        print(f"  Not Run: {total.get('NotRun', 0)}")
+        print()
+        print("Component Status:")
+        for component in ["NetBox", "Syslog", "ServiceNow", "Zendesk", "FlowAnalytics"]:
+            if component in health_data:
+                status = health_data[component].get("status", "Unknown")
+                details = health_data[component].get("details", "N/A")
+                print(f"  {component}: {status}")
+                if status != "Passed":
+                    print(f"    Details: {details}")
+        print("\nFull validation report:")
+        print(json.dumps(health_data, indent=2))
+    else:
+        print("Error: Invalid validation response format")
+        print(json.dumps(health_data, indent=2))
+else:
+    print("Error: Failed to validate system health")
+print()
+
 # Summary
 print("=" * 70)
 print("Test Summary")
