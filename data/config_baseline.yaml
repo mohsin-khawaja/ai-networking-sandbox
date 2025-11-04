@@ -1,0 +1,66 @@
+# Configuration baseline for compliance checking
+target_firmware_version: "202311.1"
+last_updated: "2024-11-01"
+
+settings:
+  snmp_enabled: true
+  syslog_server: "192.168.1.100"
+  ntp_server: "pool.ntp.org"
+  ssh_enabled: true
+  telnet_enabled: false
+  management_vlan: 101
+
+devices:
+  - name: sonic-leaf-01
+    firmware_version: "202311.1"
+    last_config_update: "2024-10-15"
+    settings:
+      snmp_enabled: true
+      syslog_server: "192.168.1.100"
+      ntp_server: "pool.ntp.org"
+      ssh_enabled: true
+      telnet_enabled: false
+      management_vlan: 101
+    compliance_status: "compliant"
+  
+  - name: nexus-agg-02
+    firmware_version: "10.3(3)"
+    last_config_update: "2024-09-20"
+    settings:
+      snmp_enabled: true
+      syslog_server: "192.168.1.101"
+      ntp_server: "pool.ntp.org"
+      ssh_enabled: true
+      telnet_enabled: true
+      management_vlan: 101
+    compliance_status: "non_compliant"
+    drift_reasons:
+      - "telnet_enabled should be false"
+      - "syslog_server mismatch"
+  
+  - name: sonic-spine-01
+    firmware_version: "202311.1"
+    last_config_update: "2024-11-01"
+    settings:
+      snmp_enabled: true
+      syslog_server: "192.168.1.100"
+      ntp_server: "pool.ntp.org"
+      ssh_enabled: true
+      telnet_enabled: false
+      management_vlan: 101
+    compliance_status: "compliant"
+  
+  - name: edgecore-switch-03
+    firmware_version: "202310.1"
+    last_config_update: "2024-08-10"
+    settings:
+      snmp_enabled: true
+      syslog_server: "192.168.1.100"
+      ntp_server: "pool.ntp.org"
+      ssh_enabled: true
+      telnet_enabled: false
+      management_vlan: 101
+    compliance_status: "non_compliant"
+    drift_reasons:
+      - "firmware_version outdated (202310.1 < 202311.1)"
+

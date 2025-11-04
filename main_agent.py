@@ -8,6 +8,7 @@ import json
 import subprocess
 import sys
 import os
+import time
 from typing import Dict, Optional, List, Any
 
 # Try to import tabulate, fallback to simple table formatter
@@ -874,102 +875,204 @@ class ResponseRenderer:
         return json.dumps(response, indent=2)
 
 
+class CoordinatorResponseRenderer:
+    """Renderer for coordinator agent responses."""
+    
+    @staticmethod
+    def _format_table(data: List[List[Any]], headers: List[str]) -> str:
+        """Format table data with fallback if tabulate is not available."""
+        if TABULATE_AVAILABLE:
+            return tabulate(data, headers=headers, tablefmt="grid")
+        else:
+            # Simple fallback table formatter
+            output = []
+            # Calculate column widths
+            col_widths = [len(str(h)) for h in headers]
+            for row in data:
+                for i, cell in enumerate(row):
+                    if i < len(col_widths):
+                        col_widths[i] = max(col_widths[i], len(str(cell)))
+            
+            # Print header
+            header_line = " | ".join(str(h).ljust(col_widths[i]) for i, h in enumerate(headers))
+            output.append(header_line)
+            output.append("-" * len(header_line))
+            
+            # Print rows
+            for row in data:
+                row_line = " | ".join(str(cell).ljust(col_widths[i]) for i, cell in enumerate(row))
+                output.append(row_line)
+            
+            return "\n".join(output)
+    
+    @staticmethod
+    def render(result: Dict[str, Any]) -> str:
+        """Render coordinator response with combined results from multiple agents."""
+        output = []
+        
+        # Summary
+        summary = result.get("summary", "Query executed")
+        output.append("\n" + "=" * 70)
+        output.append("Query Result")
+        output.append("=" * 70)
+        output.append(f"Summary: {summary}")
+        output.append("")
+        
+        # Agents called
+        agents_called = result.get("agents_called", [])
+        if agents_called:
+            output.append(f"Agents invoked: {', '.join(agents_called)}")
+            output.append("")
+        
+        # Errors
+        errors = result.get("errors", {})
+        if errors:
+            output.append("Errors:")
+            for agent, error in errors.items():
+                output.append(f"  {agent}: {error}")
+            output.append("")
+        
+        # Results from each agent
+        results = result.get("results", {})
+        for agent_name, agent_result in results.items():
+            if agent_name in errors:
+                continue
+            
+            output.append(f"\n{agent_name.title()} Agent Results:")
+            output.append("-" * 70)
+            
+            if isinstance(agent_result, dict):
+                query_type = agent_result.get("query_type", "unknown")
+                data = agent_result.get("data", {})
+                agent_summary = agent_result.get("summary", "")
+                
+                output.append(f"Query Type: {query_type}")
+                if agent_summary:
+                    output.append(f"Summary: {agent_summary}")
+                output.append("")
+                
+                # Render data based on type
+                if query_type == "device_info" and "device" in data:
+                    device = data["device"]
+                    output.append(f"Device: {device.get('name', 'N/A')}")
+                    output.append(f"IP: {device.get('ip', 'N/A')}")
+                    output.append(f"Vendor: {device.get('vendor', 'N/A')}")
+                    output.append(f"OS: {device.get('os', 'N/A')}")
+                    output.append(f"Role: {device.get('role', 'N/A')}")
+                    vlans = device.get("vlans", [])
+                    if vlans:
+                        output.append("VLANs:")
+                        for vlan in vlans:
+                            if isinstance(vlan, dict):
+                                output.append(f"  - VLAN {vlan.get('id', 'N/A')}: {vlan.get('name', 'N/A')}")
+                
+                elif query_type == "vlan_lookup":
+                    devices = data.get("devices", [])
+                    if devices:
+                        device_table = []
+                        for device in devices:
+                            device_table.append([
+                                device.get("name", "N/A"),
+                                device.get("ip", "N/A"),
+                                device.get("vendor", "N/A"),
+                                device.get("role", "N/A")
+                            ])
+                        output.append(CoordinatorResponseRenderer._format_table(
+                            device_table,
+                            ["Device", "IP", "Vendor", "Role"]
+                        ))
+                
+                elif query_type == "error_threshold" or query_type == "high_utilization":
+                    devices = data if isinstance(data, list) else []
+                    if devices:
+                        device_table = []
+                        for device in devices:
+                            device_table.append([
+                                device.get("device", "N/A"),
+                                device.get("interface", "N/A"),
+                                device.get("rx_errors", 0),
+                                device.get("tx_errors", 0),
+                                f"{device.get('utilization', 0):.1%}"
+                            ])
+                        output.append(CoordinatorResponseRenderer._format_table(
+                            device_table,
+                            ["Device", "Interface", "RX Errors", "TX Errors", "Utilization"]
+                        ))
+                
+                elif query_type == "firmware_check":
+                    devices = data if isinstance(data, list) else []
+                    if devices:
+                        device_table = []
+                        for device in devices:
+                            device_table.append([
+                                device.get("device", "N/A"),
+                                device.get("current_version", "N/A"),
+                                device.get("target_version", "N/A")
+                            ])
+                        output.append(CoordinatorResponseRenderer._format_table(
+                            device_table,
+                            ["Device", "Current Version", "Target Version"]
+                        ))
+                
+                elif query_type == "open_tickets" or query_type == "high_priority":
+                    tickets = data if isinstance(data, list) else []
+                    if tickets:
+                        ticket_table = []
+                        for ticket in tickets:
+                            ticket_table.append([
+                                ticket.get("id", "N/A"),
+                                ticket.get("title", "N/A")[:40],
+                                ticket.get("device", "N/A"),
+                                ticket.get("priority", "N/A"),
+                                ticket.get("status", "N/A")
+                            ])
+                        output.append(CoordinatorResponseRenderer._format_table(
+                            ticket_table,
+                            ["Ticket ID", "Title", "Device", "Priority", "Status"]
+                        ))
+                
+                elif isinstance(data, (dict, list)):
+                    # Generic structured data
+                    output.append(json.dumps(data, indent=2))
+        
+        # Structured data overview
+        structured_data = result.get("structured_data", {})
+        if structured_data:
+            output.append("\n" + "-" * 70)
+            output.append("Combined Data Overview:")
+            output.append(f"  Devices: {len(structured_data.get('devices', []))}")
+            output.append(f"  Telemetry entries: {len(structured_data.get('telemetry', []))}")
+            output.append(f"  Config issues: {len(structured_data.get('config_issues', []))}")
+            output.append(f"  Tickets: {len(structured_data.get('tickets', []))}")
+        
+        return "\n".join(output)
+
+
 def main():
     """
-    Main entry point for the interactive agent.
+    Main entry point for the interactive multi-agent coordinator system.
     
-    The agent launches the MCP server as a subprocess and communicates with it
-    via stdio (JSON-RPC). This is required because FastMCP uses stdio for transport.
+    This agent uses a coordinator to route queries to domain-specific sub-agents
+    (Inventory, Telemetry, Config, Ticketing) and combines their responses.
     
     Usage:
         python main_agent.py
     
     Environment Variables:
         OPENAI_API_KEY: OpenAI API key for LLM-based query parsing (optional)
-        NETBOX_URL: NetBox API URL (optional, loaded from .env)
-        NETBOX_TOKEN: NetBox API token (optional, loaded from .env)
-        TELNET_HOST: Telnet device hostname (optional, loaded from .env)
-        TELNET_USERNAME: Telnet username (optional, loaded from .env)
-        TELNET_PASSWORD: Telnet password (optional, loaded from .env)
     """
-    print("Aviz AI Agent ready. Ask me about your network.")
+    print("Aviz AI Agent (Multi-Agent Coordinator) ready. Ask me about your network.")
     print()
     
-    # Launch MCP server as subprocess
-    # Note: FastMCP uses stdio for communication, so we must launch it as a subprocess
-    # The server will run in the background and communicate via stdin/stdout pipes
-    try:
-        proc = subprocess.Popen(
-            [sys.executable, "mcp_server.py"],
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            bufsize=0
-        )
-    except Exception as e:
-        print(f"Error: Failed to launch MCP server: {e}")
-        print("Make sure mcp_server.py is in the current directory")
-        sys.exit(1)
+    # Initialize coordinator agent
+    from agents.coordinator_agent import get_coordinator
+    coordinator = get_coordinator()
     
-    # Wait a moment and check if server started successfully
-    import time
-    import threading
+    # Initialize response renderer for coordinator output
+    renderer = CoordinatorResponseRenderer()
     
-    # Read stderr in background to capture any errors
-    stderr_lines = []
-    def read_stderr():
-        for line in proc.stderr:
-            stderr_lines.append(line)
-    
-    stderr_thread = threading.Thread(target=read_stderr, daemon=True)
-    stderr_thread.start()
-    
-    time.sleep(2.0)  # Give server more time to fully initialize
-    
-    # Check if server process is still running
-    if proc.poll() is not None:
-        # Server crashed, show error output
-        print(f"Error: MCP server crashed during startup (exit code: {proc.returncode})")
-        if stderr_lines:
-            print("\nServer error output:")
-            print("".join(stderr_lines[-20:]))  # Last 20 lines
-        sys.exit(1)
-    
-    # Initialize MCP client
-    mcp_client = MCPClient(proc)
-    if not mcp_client.initialize():
-        print("Error: Failed to initialize MCP connection")
-        # Try to get server error output
-        try:
-            stderr_output = proc.stderr.read()
-            if stderr_output:
-                print("\nServer error output:")
-                print(stderr_output[-500:])
-        except:
-            pass
-        proc.terminate()
-        proc.wait()
-        sys.exit(1)
-    
-    # Initialize query parser
-    # Check for OpenAI API key in environment
-    openai_api_key = os.getenv("OPENAI_API_KEY")
-    use_openai = OPENAI_AVAILABLE and openai_api_key is not None
-    
-    if use_openai:
-        print("Using OpenAI for query parsing")
-    else:
-        if not OPENAI_AVAILABLE:
-            print("Note: OpenAI package not installed. Using pattern-based query parsing.")
-            print("      Install with: pip install openai")
-        elif not openai_api_key:
-            print("Note: OPENAI_API_KEY not set. Using pattern-based query parsing.")
-            print("      Set OPENAI_API_KEY in .env for LLM support.")
-    print()
-    
-    parser = QueryParser(use_openai=use_openai)
-    renderer = ResponseRenderer()
+    # Conversational memory
+    conversation_context = []
     
     # Interactive loop
     while True:
@@ -985,52 +1088,52 @@ def main():
             
             if query.lower() == "help":
                 print("\nAvailable commands:")
-                print("  - Ask questions about network topology, devices, interfaces")
+                print("  - Ask questions about network devices, telemetry, configuration, tickets")
                 print("  - Examples:")
-                print("    'Show me the network topology'")
-                print("    'List all devices from NetBox'")
-                print("    'Get device and interface report'")
-                print("    'What is the port telemetry?'")
-                print("    'Validate system health'")
-                print("    'Which VLAN is this device on?'")
-                print("    'List all interfaces for sonic-leaf-01'")
-                print("    'Summarize traffic utilization'")
+                print("    'Which VLAN is sonic-leaf-01 on?'")
+                print("    'List all devices on VLAN 103'")
+                print("    'Show devices with rx_errors > 5'")
+                print("    'List all SONiC devices'")
+                print("    'Show high priority tickets'")
+                print("    'List devices with outdated firmware'")
+                print("    'Compare config drift and utilization for all SONiC switches'")
+                print("    'Show me all devices with high CPU usage and open ServiceNow tickets'")
                 print("  - Type 'quit' or 'exit' to exit")
-                print("\nAvailable MCP Tools:")
-                for tool_name, tool_info in parser.AVAILABLE_TOOLS.items():
-                    print(f"  - {tool_name}: {tool_info['description']}")
+                print("  - Type 'clear' to clear conversation context")
+                print("\nAvailable Agents:")
+                print("  - Inventory: Device inventory, VLANs, device information")
+                print("  - Telemetry: Interface status, errors, utilization, CPU/memory")
+                print("  - Config: Firmware versions, configuration compliance, drift")
+                print("  - Ticketing: ServiceNow, Zendesk tickets, incidents")
                 continue
             
-            # Parse query
-            parsed = parser.parse_query(query)
-            tool_name = parsed.get("tool")
-            arguments = parsed.get("arguments", {})
-            confidence = parsed.get("confidence", 0.0)
-            
-            if not tool_name:
-                print("Error: Could not determine which tool to call")
-                print("Try rephrasing your question or type 'help' for examples")
+            if query.lower() == "clear":
+                conversation_context = []
+                print("Conversation context cleared")
                 continue
             
-            # Filter out empty string arguments (they're optional and shouldn't be sent)
-            arguments = {k: v for k, v in arguments.items() if v != ""}
+            # Build context from conversation history
+            context = {
+                "history": conversation_context[-5:],  # Last 5 queries
+                "session_id": "default"
+            }
             
-            # Call MCP tool
-            response = mcp_client.call_tool(tool_name, arguments)
+            # Execute query through coordinator
+            result = coordinator.execute_query(query, context)
             
-            if response:
-                # Render response
-                output = renderer.render(response, tool_name)
-                print(output)
-            else:
-                print("Error: No response from MCP server")
+            # Update conversation context
+            conversation_context.append({
+                "query": query,
+                "agents": result.get("agents_called", []),
+                "timestamp": time.time()
+            })
+            
+            # Render coordinator response
+            output = renderer.render(result)
+            print(output)
         
         except KeyboardInterrupt:
             print("\n\nGoodbye!")
-            break
-        except BrokenPipeError:
-            print("\nError: Connection to MCP server lost")
-            print("The server may have terminated unexpectedly")
             break
         except Exception as e:
             print(f"Error: {e}")
@@ -1038,15 +1141,6 @@ def main():
             if os.getenv("DEBUG", "").lower() in ("1", "true", "yes"):
                 import traceback
                 traceback.print_exc()
-    
-    # Cleanup
-    try:
-        proc.stdin.close()
-        proc.terminate()
-        proc.wait(timeout=5)
-    except Exception:
-        proc.kill()
-        proc.wait()
 
 
 if __name__ == "__main__":

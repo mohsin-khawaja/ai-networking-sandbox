@@ -15,28 +15,54 @@ NCP is designed to be **vendor-agnostic**, providing unified observability, vali
 
 ## Architecture
 
-The project follows a modular, production-ready architecture:
+The project follows a modular, production-ready architecture with a **multi-agent coordination system** inspired by Aviz's AI ONE Center framework:
 
 ```
 aviz_agents/
-├── agents/                    # AI agent modules
-│   ├── telemetry_agent.py      # Network telemetry collection
-│   ├── ai_agent.py             # ML-based health prediction
-│   ├── build_agent.py          # Build metadata validation
-│   ├── remediation_agent.py   # Automated remediation
-│   ├── integration_tools.py    # Telnet and NetBox integration
-│   └── validation_agent.py     # System health validation (AI ONE Center)
-├── data/                       # Data files
-│   ├── builds/                 # Build JSON samples (SONiC, Cisco, EdgeCore)
-│   └── netbox_sample.json      # Sample NetBox topology data
-├── utils/                      # Shared utilities
-│   ├── logger.py               # Centralized logging
-│   ├── file_loader.py          # JSON file loading
-│   └── topology_builder.py     # Network topology generation
-├── mcp_server.py               # Main MCP orchestrator
-├── client_test.py              # Test client
-└── README.md
+├── agents/                          # AI agent modules
+│   ├── coordinator_agent.py         # Multi-agent coordinator (orchestrates sub-agents)
+│   ├── inventory_agent_wrapper.py   # Device inventory agent (YAML/NetBox)
+│   ├── telemetry_agent_wrapper.py   # Network telemetry agent (monitoring)
+│   ├── config_agent.py              # Configuration compliance agent
+│   ├── ticketing_agent.py           # Ticketing system agent (ServiceNow/Zendesk)
+│   ├── inventory_agent.py           # Inventory data loader (YAML-based)
+│   ├── telemetry_agent.py           # Network telemetry collection
+│   ├── ai_agent.py                  # ML-based health prediction
+│   ├── build_agent.py                # Build metadata validation
+│   ├── remediation_agent.py         # Automated remediation
+│   ├── integration_tools.py         # Telnet and NetBox integration
+│   └── validation_agent.py          # System health validation (AI ONE Center)
+├── data/                             # Data files
+│   ├── devices.yaml                  # Device inventory (YAML)
+│   ├── telemetry_data.json           # Telemetry mock data
+│   ├── config_baseline.yaml          # Configuration baseline
+│   ├── tickets.json                  # Ticket mock data
+│   ├── builds/                       # Build JSON samples (SONiC, Cisco, EdgeCore)
+│   └── netbox_sample.json            # Sample NetBox topology data
+├── utils/                            # Shared utilities
+│   ├── logger.py                     # Centralized logging
+│   ├── file_loader.py                # JSON file loading
+│   └── topology_builder.py           # Network topology generation
+├── mcp_server.py                     # Main MCP orchestrator
+├── main_agent.py                     # Interactive CLI with coordinator
+├── coordinator_agent.py              # Standalone coordinator script
+└── client_test.py                    # Test client
 ```
+
+### Multi-Agent Coordination System
+
+The framework implements a **coordinator-based architecture** where a central `CoordinatorAgent` routes natural language queries to domain-specific sub-agents:
+
+- **InventoryAgent**: Handles device inventory queries (YAML/NetBox)
+- **TelemetryAgent**: Manages telemetry and monitoring queries
+- **ConfigAgent**: Validates configuration compliance and firmware versions
+- **TicketingAgent**: Integrates with ServiceNow, Zendesk, and JIRA
+
+The coordinator automatically:
+- Routes queries to appropriate agents based on intent
+- Combines results from multiple agents for cross-domain queries
+- Provides unified structured responses and summaries
+- Handles errors gracefully and maintains conversation context
 
 Each agent module is self-contained, testable, and designed for integration with real NCP workflows.
 
@@ -671,24 +697,61 @@ python mcp_server.py
 
 The server will initialize all agents, load the AI model, and wait for requests on stdio. Logs are written to stderr.
 
-### Interactive CLI Agent
+### Interactive CLI Agent (Multi-Agent Coordinator)
 
 ```bash
 python main_agent.py
 ```
 
-This launches an interactive conversational interface where you can ask natural language questions:
-- "Show me the network topology"
-- "List all devices from NetBox"
-- "Get device and interface report"
-- "What is the port telemetry?"
-- "Validate system health"
-- "Which VLAN is this device on?"
-- "List all interfaces for sonic-leaf-01"
+This launches an interactive conversational interface powered by the **multi-agent coordinator system**. The coordinator routes your queries to domain-specific agents and combines their responses.
 
-The agent uses an LLM (OpenAI) or pattern matching to parse your queries and map them to appropriate MCP tools, then formats the responses in clear tables and summaries.
+**Example Queries:**
 
-**Note:** For LLM support, set `OPENAI_API_KEY` environment variable. Without it, the agent falls back to pattern-based query parsing.
+**Inventory Queries:**
+- "Which VLAN is sonic-leaf-01 on?"
+- "List all devices on VLAN 103"
+- "Show VLAN table"
+- "List all SONiC devices"
+
+**Telemetry Queries:**
+- "Show devices with rx_errors > 5"
+- "List interfaces with high utilization"
+- "Show interface status for sonic-leaf-01"
+
+**Configuration Queries:**
+- "List devices with outdated firmware"
+- "Show configuration drift"
+- "Compare config compliance"
+
+**Ticketing Queries:**
+- "Show open high priority tickets"
+- "List ServiceNow tickets for nexus-agg-02"
+- "Show all open tickets"
+
+**Cross-Domain Queries (Multiple Agents):**
+- "Compare config drift and utilization for all SONiC switches"
+- "Show me all devices with high CPU usage and open ServiceNow tickets"
+
+The coordinator uses pattern-based intent parsing to route queries to appropriate agents. Responses are formatted in clear tables and summaries with combined insights from multiple domains.
+
+**Note:** The system maintains conversation context. Type `clear` to reset context, or `help` for more examples.
+
+### Standalone Coordinator Agent
+
+```bash
+python coordinator_agent.py
+```
+
+Run the coordinator agent directly for testing without the full CLI interface. Supports both interactive and command-line query modes:
+
+```bash
+# Interactive mode
+python coordinator_agent.py
+
+# Command-line query mode
+python coordinator_agent.py "Which VLAN is sonic-leaf-01 on?"
+python coordinator_agent.py "Show devices with rx_errors > 5"
+```
 
 ### Test with Client
 
@@ -696,7 +759,7 @@ The agent uses an LLM (OpenAI) or pattern matching to parse your queries and map
 python client_test.py
 ```
 
-The test client demonstrates all nine tools:
+The test client demonstrates all MCP tools:
 1. Port telemetry collection
 2. Network topology retrieval
 3. Link health prediction
@@ -706,6 +769,8 @@ The test client demonstrates all nine tools:
 7. Topology from NetBox
 8. Device and interface report (NetBox + Telnet combined)
 9. System health validation (AI ONE Center style)
+10. Device inventory queries (YAML-based)
+11. VLAN lookup and tables
 
 ### Example Output
 
@@ -836,12 +901,120 @@ if health["status"] == "warning":
         execute_remediation(remediation["recommended_action"])
 ```
 
+## Multi-Agent Coordinator System
+
+The coordinator system implements a production-ready architecture for multi-agent orchestration, similar to Aviz's AI ONE Center framework.
+
+### Architecture Overview
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    CoordinatorAgent                          │
+│  (Routes queries, combines results, maintains context)      │
+└────────────────────┬────────────────────────────────────────┘
+                     │
+        ┌────────────┼────────────┐
+        │            │            │
+        ▼            ▼            ▼
+┌──────────────┐ ┌──────────────┐ ┌──────────────┐ ┌──────────────┐
+│ Inventory    │ │ Telemetry    │ │ Config       │ │ Ticketing    │
+│ Agent        │ │ Agent        │ │ Agent        │ │ Agent        │
+│              │ │              │ │              │ │              │
+│ - YAML       │ │ - Interface  │ │ - Firmware   │ │ - ServiceNow │
+│ - NetBox     │ │   status     │ │   versions   │ │ - Zendesk    │
+│ - VLANs      │ │ - Errors     │ │ - Compliance │ │ - JIRA       │
+│ - Devices    │ │ - Utilization│ │ - Drift      │ │ - Incidents  │
+└──────────────┘ └──────────────┘ └──────────────┘ └──────────────┘
+```
+
+### Query Routing
+
+The coordinator uses keyword-based intent parsing to route queries:
+
+- **Inventory keywords**: `vlan`, `device`, `inventory`, `sonic`, `nexus`, `edgecore`, `role`, `vendor`
+- **Telemetry keywords**: `telemetry`, `utilization`, `rx_errors`, `tx_errors`, `bandwidth`, `cpu`, `memory`
+- **Config keywords**: `config`, `firmware`, `version`, `compliance`, `drift`, `baseline`
+- **Ticketing keywords**: `ticket`, `servicenow`, `zendesk`, `incident`, `priority`
+
+### Example Multi-Agent Queries
+
+**Single Agent:**
+```
+Query: "Which VLAN is sonic-leaf-01 on?"
+→ Routes to: InventoryAgent
+→ Returns: Device info with VLANs
+```
+
+**Multiple Agents (Parallel Execution):**
+```
+Query: "Compare config drift and utilization for all SONiC switches"
+→ Routes to: ConfigAgent + TelemetryAgent + InventoryAgent
+→ Returns: Combined results showing devices with drift and utilization
+```
+
+**Cross-Domain Reasoning:**
+```
+Query: "Show me all devices with high CPU usage and open ServiceNow tickets"
+→ Routes to: TelemetryAgent + TicketingAgent
+→ Returns: Devices matching both criteria with combined insights
+```
+
+### Data Sources
+
+The system uses mock data files for simulation:
+
+- **`data/devices.yaml`**: Device inventory with VLANs, roles, vendors
+- **`data/telemetry_data.json`**: Interface telemetry (rx/tx, errors, utilization)
+- **`data/config_baseline.yaml`**: Configuration baseline and compliance rules
+- **`data/tickets.json`**: ServiceNow, Zendesk tickets with device associations
+
+In production, these would connect to:
+- **FastDI**: Real-time telemetry streams
+- **ELK**: Log aggregation and analysis
+- **NetBox**: Source of truth for inventory
+- **ServiceNow/Zendesk**: Live ticketing systems
+
+### Extending the System
+
+To add a new agent:
+
+1. Create a new agent class in `agents/` (e.g., `agents/security_agent.py`)
+2. Implement `process_query(query: str, context: Dict) -> Dict`
+3. Register in `coordinator_agent.py`'s `_register_sub_agents()` method
+4. Add routing keywords in `route_query()` method
+5. Update `CoordinatorResponseRenderer` in `main_agent.py` for custom rendering
+
+Example:
+
+```python
+# agents/security_agent.py
+class SecurityAgent:
+    def process_query(self, query: str, context: Optional[Dict] = None) -> Dict:
+        # Process security-related queries
+        return {
+            "success": True,
+            "agent": "security",
+            "query_type": "threat_analysis",
+            "data": {...},
+            "summary": "..."
+        }
+```
+
 ## Project Structure Details
 
 ### Agents
 
 Each agent module is self-contained and testable:
 
+**Multi-Agent Coordinator:**
+- **`agents/coordinator_agent.py`**: Central coordinator that routes queries to sub-agents
+- **`agents/inventory_agent_wrapper.py`**: Wraps inventory queries (YAML/NetBox)
+- **`agents/telemetry_agent_wrapper.py`**: Wraps telemetry queries (monitoring)
+- **`agents/config_agent.py`**: Configuration compliance and firmware validation
+- **`agents/ticketing_agent.py`**: ServiceNow, Zendesk, JIRA integration
+
+**Core Agents:**
+- **`agents/inventory_agent.py`**: YAML-based device inventory loader
 - **`agents/telemetry_agent.py`**: Handles network telemetry collection and topology generation
 - **`agents/ai_agent.py`**: Contains the PyTorch model and health prediction logic with GPU support
 - **`agents/build_agent.py`**: Validates build metadata for SONiC and non-SONiC devices

@@ -1,0 +1,50 @@
+{
+  "tickets": [
+    {
+      "id": "SN001234",
+      "source": "ServiceNow",
+      "title": "High CPU usage on nexus-agg-02",
+      "device": "nexus-agg-02",
+      "priority": "high",
+      "status": "open",
+      "assigned_to": "network-team",
+      "created": "2024-11-03T08:00:00Z",
+      "description": "CPU usage consistently above 80% for past 24 hours"
+    },
+    {
+      "id": "ZD5678",
+      "source": "Zendesk",
+      "title": "Interface errors on sonic-leaf-01",
+      "device": "sonic-leaf-01",
+      "priority": "medium",
+      "status": "open",
+      "assigned_to": "ops-team",
+      "created": "2024-11-04T09:15:00Z",
+      "description": "RX errors detected on Ethernet12 interface"
+    },
+    {
+      "id": "SN001235",
+      "source": "ServiceNow",
+      "title": "Configuration drift detected",
+      "device": "nexus-agg-02",
+      "priority": "critical",
+      "status": "open",
+      "assigned_to": "config-team",
+      "created": "2024-11-04T10:00:00Z",
+      "description": "Device configuration does not match baseline"
+    },
+    {
+      "id": "SN001200",
+      "source": "ServiceNow",
+      "title": "Firmware update required",
+      "device": "edgecore-switch-03",
+      "priority": "medium",
+      "status": "closed",
+      "assigned_to": "maintenance-team",
+      "created": "2024-10-28T14:00:00Z",
+      "resolved": "2024-11-01T16:30:00Z",
+      "description": "Device firmware version outdated"
+    }
+  ]
+}
+

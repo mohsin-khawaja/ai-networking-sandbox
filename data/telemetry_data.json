@@ -1,0 +1,53 @@
+{
+  "telemetry": [
+    {
+      "device": "sonic-leaf-01",
+      "interface": "Ethernet12",
+      "rx_bytes": 45678901,
+      "tx_bytes": 56789012,
+      "rx_errors": 3,
+      "tx_errors": 7,
+      "utilization": 0.72,
+      "cpu_usage": 0.45,
+      "memory_usage": 0.62,
+      "timestamp": "2024-11-04T10:30:00Z"
+    },
+    {
+      "device": "nexus-agg-02",
+      "interface": "GigabitEthernet0/1",
+      "rx_bytes": 12345678,
+      "tx_bytes": 23456789,
+      "rx_errors": 12,
+      "tx_errors": 5,
+      "utilization": 0.85,
+      "cpu_usage": 0.78,
+      "memory_usage": 0.81,
+      "timestamp": "2024-11-04T10:30:00Z"
+    },
+    {
+      "device": "sonic-spine-01",
+      "interface": "Ethernet1/1",
+      "rx_bytes": 98765432,
+      "tx_bytes": 87654321,
+      "rx_errors": 1,
+      "tx_errors": 2,
+      "utilization": 0.65,
+      "cpu_usage": 0.35,
+      "memory_usage": 0.48,
+      "timestamp": "2024-11-04T10:30:00Z"
+    },
+    {
+      "device": "edgecore-switch-03",
+      "interface": "Ethernet1",
+      "rx_bytes": 34567890,
+      "tx_bytes": 45678901,
+      "rx_errors": 8,
+      "tx_errors": 4,
+      "utilization": 0.92,
+      "cpu_usage": 0.88,
+      "memory_usage": 0.75,
+      "timestamp": "2024-11-04T10:30:00Z"
+    }
+  ]
+}
+
