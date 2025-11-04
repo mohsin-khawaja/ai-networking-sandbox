@@ -255,28 +255,85 @@ print()
 print("=" * 70)
 print("Test 8: Get Device and Interface Report (NetBox + Telnet)")
 print("=" * 70)
-print("Note: This combines NetBox device inventory with Telnet interface data.")
-print("      Uses demo.netbox.dev API and .env credentials if available.")
-report_data = call_tool(proc, "get_device_and_interface_report", {}, request_id)
-request_id += 1
-if report_data:
-    print(f"NetBox Status: {report_data.get('NetBox_Status', 'Unknown')}")
-    print(f"Telnet Status: {report_data.get('Telnet_Status', 'Unknown')}")
-    if report_data.get("NetBox_Devices"):
-        print(f"\nNetBox Devices ({len(report_data['NetBox_Devices'])}):")
-        for device in report_data["NetBox_Devices"][:5]:
-            print(f"  - {device}")
-        if len(report_data["NetBox_Devices"]) > 5:
-            print(f"  ... and {len(report_data['NetBox_Devices']) - 5} more")
-    if report_data.get("Telnet_Output"):
-        print(f"\nTelnet Output (first 500 chars):")
-        print(report_data["Telnet_Output"])
-    if report_data.get("error"):
-        print(f"\nError: {report_data['error']}")
-    print("\nFull report:")
-    print(json.dumps(report_data, indent=2))
-else:
-    print("Error: Failed to generate device and interface report")
+print("This tool combines NetBox device inventory with Telnet interface data.")
+print("Supports both mock (local) and real (lab) environments via .env configuration.")
+print()
+
+# Try calling with empty parameters first (uses .env if available)
+try:
+    report_data = call_tool(proc, "get_device_and_interface_report", {}, request_id)
+    request_id += 1
+    
+    if report_data:
+        # Display status summary
+        netbox_status = report_data.get('NetBox_Status', 'Unknown')
+        telnet_status = report_data.get('Telnet_Status', 'Unknown')
+        
+        print("Report Status:")
+        print(f"  NetBox: {netbox_status}")
+        print(f"  Telnet: {telnet_status}")
+        print()
+        
+        # Display NetBox results
+        if netbox_status == "Success":
+            devices = report_data.get("NetBox_Devices", [])
+            print(f"NetBox Devices ({len(devices)}):")
+            if devices:
+                for i, device in enumerate(devices[:10], 1):
+                    print(f"  {i}. {device}")
+                if len(devices) > 10:
+                    print(f"  ... and {len(devices) - 10} more devices")
+            else:
+                print("  No devices found in NetBox inventory")
+        elif netbox_status == "Failed":
+            error_msg = report_data.get("error", "Unknown error")
+            print(f"NetBox Error: {error_msg}")
+            print("  Note: This is expected if NetBox is not accessible or token is invalid.")
+            print("  In production, ensure NETBOX_URL and NETBOX_TOKEN are set in .env")
+        else:
+            print(f"NetBox Status: {netbox_status}")
+        
+        print()
+        
+        # Display Telnet results
+        if telnet_status == "Success":
+            telnet_output = report_data.get("Telnet_Output", "")
+            if telnet_output:
+                print("Telnet Command Output (first 500 characters):")
+                print("-" * 70)
+                print(telnet_output)
+                print("-" * 70)
+            else:
+                print("Telnet: Command executed but no output received")
+        elif telnet_status == "Failed":
+            error_msg = report_data.get("error", "Unknown error")
+            print(f"Telnet Error: {error_msg}")
+            print("  Note: This is expected if no device is reachable at the configured host.")
+            print("  In production, ensure TELNET_HOST, TELNET_USERNAME, and TELNET_PASSWORD are set in .env")
+        elif telnet_status == "Skipped":
+            print("Telnet: Skipped (no host configured)")
+            print("  To enable Telnet, set TELNET_HOST in .env or pass telnet_host parameter")
+        else:
+            print(f"Telnet Status: {telnet_status}")
+        
+        print()
+        
+        # Display full JSON report for debugging
+        print("Full Report (JSON):")
+        print("-" * 70)
+        print(json.dumps(report_data, indent=2))
+        print("-" * 70)
+        
+    else:
+        print("Error: Failed to generate device and interface report")
+        print("The tool call returned no data. Check server logs for details.")
+        
+except Exception as e:
+    print(f"Exception occurred while calling get_device_and_interface_report: {e}")
+    print("This indicates a communication error with the MCP server.")
+    import traceback
+    traceback.print_exc()
+
 print()
 
 # Test 9: Validate system health

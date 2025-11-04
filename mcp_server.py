@@ -297,6 +297,17 @@ def get_device_and_interface_report(
     - Validates that devices in NetBox are actually reachable
     - In production, this would be used for automated validation and monitoring
     
+    Integration Points for Future Enhancement:
+    - FastDI Integration: Replace Telnet with FastDI API calls for real-time
+      device state retrieval. FastDI provides structured telemetry data that
+      can be directly consumed without parsing CLI output.
+    - ELK Integration: Enhance NetBox device list with ELK log analysis to
+      identify devices with recent errors or anomalies. This would add a
+      "health_score" field based on syslog patterns.
+    - gNMI Integration: Replace Telnet interface queries with gNMI Subscribe
+      for streaming telemetry. This provides real-time interface counters
+      and state information.
+    
     Args:
         netbox_url: NetBox API URL (optional, defaults to .env NETBOX_URL or demo.netbox.dev)
         netbox_token: NetBox API token (optional, defaults to .env NETBOX_TOKEN)
@@ -306,7 +317,18 @@ def get_device_and_interface_report(
         telnet_command: CLI command to execute (defaults to "show interfaces status")
         
     Returns:
-        Dictionary containing NetBox_Devices list, Telnet_Output, and status for both
+        Dictionary containing:
+        - NetBox_Devices: List of device names from NetBox inventory
+        - Telnet_Output: First 500 characters of Telnet command output
+        - NetBox_Status: "Success", "Failed", or "Not Run"
+        - Telnet_Status: "Success", "Failed", "Skipped", or "Not Run"
+        - error: Error message if any operation failed
+        
+    Error Handling:
+        - NetBox connection failures are handled gracefully and reported
+        - Telnet connection timeouts and authentication errors are caught
+        - Missing credentials default to .env file values
+        - Tool returns partial results if one data source fails
     """
     try:
         return _get_device_and_interface_report(
@@ -318,7 +340,7 @@ def get_device_and_interface_report(
             telnet_command=telnet_command
         )
     except Exception as e:
-        logger.error(f"Error generating device and interface report: {e}")
+        logger.error(f"Error generating device and interface report: {e}", exc_info=True)
         return {
             "error": "Report generation failed",
             "message": str(e),

@@ -341,6 +341,20 @@ def get_device_and_interface_report(
     - Validates that devices in NetBox are actually reachable
     - In production, this would be used for automated validation and monitoring
     
+    Integration Points for Future Enhancement:
+    - FastDI Integration: Replace Telnet with FastDI API calls for real-time
+      device state retrieval. FastDI provides structured telemetry data that
+      can be directly consumed without parsing CLI output. Location: Replace
+      get_device_status_from_telnet() call at line 444 with FastDI client request.
+    - ELK Integration: Enhance NetBox device list with ELK log analysis to
+      identify devices with recent errors or anomalies. This would add a
+      "health_score" field based on syslog patterns. Location: Add ELK query
+      after NetBox device retrieval (after line 421), before returning result.
+    - gNMI Integration: Replace Telnet interface queries with gNMI Subscribe
+      for streaming telemetry. This provides real-time interface counters
+      and state information. Location: Replace telnet_command execution with
+      gNMI subscription to interface state paths.
+    
     Args:
         netbox_url: NetBox API URL (defaults to .env NETBOX_URL or demo.netbox.dev)
         netbox_token: NetBox API token (defaults to .env NETBOX_TOKEN)
@@ -420,6 +434,15 @@ def get_device_and_interface_report(
         result["NetBox_Status"] = "Success"
         logger.info(f"Retrieved {len(result['NetBox_Devices'])} devices from NetBox")
         
+        # TODO: ELK Integration - Enhance device list with ELK log analysis
+        # Example: For each device, query ELK for recent error logs
+        # elk_client = ELKClient(endpoint=elk_endpoint)
+        # for device in devices_list:
+        #     error_count = elk_client.query_error_count(device["name"], hours=24)
+        #     device["health_score"] = calculate_health_score(error_count)
+        #     device["recent_errors"] = error_count
+        # This would add health scoring based on syslog patterns
+        
     except requests.exceptions.ConnectionError:
         result["NetBox_Status"] = "Failed"
         result["error"] = "Cannot connect to NetBox API"
@@ -437,10 +460,14 @@ def get_device_and_interface_report(
         logger.error(f"NetBox error: {e}")
     
     # Step 2: Connect via Telnet and run command
+    # TODO: FastDI Integration - Replace this Telnet call with FastDI API client
+    # Example: fastdi_client.get_device_interfaces(device_id=telnet_host)
+    # This would provide structured interface data without CLI parsing
     if telnet_host:
         logger.info(f"Connecting to device via Telnet: {telnet_host}")
         try:
             # Use existing telnet function
+            # Future: Replace with FastDI API call for structured telemetry
             telnet_result = get_device_status_from_telnet(
                 host=telnet_host,
                 username=telnet_username or "",
