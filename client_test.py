@@ -368,6 +368,50 @@ else:
     print("Error: Failed to validate system health")
 print()
 
+# Test 10: Get inventory devices from NetBox (NCP SDK)
+print("=" * 70)
+print("Test 10: Get Inventory Devices from NetBox (NCP SDK)")
+print("=" * 70)
+print("Note: This tool uses the NCP SDK NetboxClient to query device inventory.")
+print("      Requires NETBOX_URL and NETBOX_TOKEN in .env file.")
+print("      Install NCP SDK with: pip install git+https://github.com/Ashok-Aviz/ncp-sdk.git")
+print()
+inventory_data = call_tool(proc, "get_inventory_devices", {}, request_id)
+request_id += 1
+if inventory_data:
+    if inventory_data.get("success"):
+        devices = inventory_data.get("devices", [])
+        count = inventory_data.get("count", 0)
+        print(f"Success: Retrieved {count} devices from NetBox")
+        if devices:
+            print("\nSample devices (first 5):")
+            for i, device in enumerate(devices[:5], 1):
+                hostname = device.get("hostname", "N/A")
+                mgmt_ip = device.get("mgmt_ip", "N/A")
+                vendor = device.get("vendor", "N/A")
+                model = device.get("model", "N/A")
+                role = device.get("role", "N/A")
+                site = device.get("site", "N/A")
+                print(f"  {i}. {hostname}")
+                print(f"     IP: {mgmt_ip}, Vendor: {vendor}, Model: {model}")
+                print(f"     Role: {role}, Site: {site}")
+            if len(devices) > 5:
+                print(f"  ... and {len(devices) - 5} more devices")
+        else:
+            print("  No devices found in NetBox inventory")
+    else:
+        error = inventory_data.get("error", "Unknown error")
+        print(f"Error: {error}")
+        print("  Note: This is expected if:")
+        print("    - NETBOX_URL or NETBOX_TOKEN are not set in .env")
+        print("    - NCP SDK is not installed")
+        print("    - NetBox instance is not accessible or authentication fails")
+    print("\nFull inventory result:")
+    print(json.dumps(inventory_data, indent=2))
+else:
+    print("Error: Failed to query inventory devices")
+print()
+
 # Summary
 print("=" * 70)
 print("Test Summary")
@@ -376,6 +420,7 @@ print("All tools tested successfully.")
 print("Note: Integration tools (Telnet, NetBox) may show errors if devices/services")
 print("      are not accessible. This is expected in test environments.")
 print("      Configure .env file for Telnet credentials if needed.")
+print("      For get_inventory_devices, ensure NCP SDK is installed and NETBOX_URL/TOKEN are set.")
 print()
 
 # Close the process

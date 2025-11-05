@@ -350,6 +350,238 @@ def get_topology_from_netbox(base_url: str, token: str) -> dict:
         }
 
 
+@mcp.tool()
+def get_inventory_devices() -> dict:
+    """
+    Query device inventory from NetBox using the NCP SDK NetboxClient.
+    
+    This tool connects to the customer's NetBox instance using the NCP SDK
+    and retrieves all devices in the inventory. It returns a structured list
+    of device information including hostname, management IP, vendor, model,
+    role, and site/region information.
+    
+    Maps to Aviz NCP functionality:
+    - Retrieves real-time device inventory from NetBox (source of truth)
+    - Provides structured device data for inventory management
+    - Supports integration with NCP SDK for standardized NetBox access
+    - Enables inventory validation and correlation workflows
+    
+    Environment Variables:
+        NETBOX_URL: NetBox base URL (e.g., "https://netbox.example.com")
+        NETBOX_TOKEN: NetBox API token for authentication
+    
+    Returns:
+        Dictionary containing:
+        - success: Boolean indicating if the query succeeded
+        - devices: List of device dictionaries with fields:
+            - hostname: Device hostname
+            - mgmt_ip: Management IP address
+            - vendor: Device vendor/manufacturer
+            - model: Device model
+            - role: Device role (leaf/spine/edge/core/etc.)
+            - site: Site name (if available)
+            - region: Region name (if available)
+        - error: Error message if query failed
+        - count: Number of devices returned
+    """
+    import os
+    try:
+        from dotenv import load_dotenv
+        load_dotenv()
+    except ImportError:
+        pass  # dotenv is optional
+    
+    try:
+        # Lazy import of ncp_sdk to handle cases where it's not installed
+        try:
+            from ncp_sdk.netbox import NetboxClient
+        except ImportError as e:
+            logger.error(f"ncp_sdk not available: {e}")
+            return {
+                "success": False,
+                "devices": [],
+                "count": 0,
+                "error": f"ncp_sdk not installed. Install with: pip install git+https://github.com/Ashok-Aviz/ncp-sdk.git"
+            }
+        
+        # Load connection settings from environment variables
+        netbox_url = os.getenv("NETBOX_URL")
+        netbox_token = os.getenv("NETBOX_TOKEN")
+        
+        if not netbox_url:
+            return {
+                "success": False,
+                "devices": [],
+                "count": 0,
+                "error": "NETBOX_URL environment variable not set. Please set NETBOX_URL in your .env file."
+            }
+        
+        if not netbox_token:
+            return {
+                "success": False,
+                "devices": [],
+                "count": 0,
+                "error": "NETBOX_TOKEN environment variable not set. Please set NETBOX_TOKEN in your .env file."
+            }
+        
+        logger.info(f"Connecting to NetBox at {netbox_url}")
+        
+        # Instantiate the NetboxClient
+        client = NetboxClient(base_url=netbox_url, token=netbox_token)
+        
+        # Query all devices in the inventory
+        # Note: The exact method name may vary based on the NCP SDK implementation
+        # Common patterns: get_devices(), list_devices(), query_devices()
+        try:
+            # Try common method names
+            if hasattr(client, 'get_devices'):
+                devices_data = client.get_devices()
+            elif hasattr(client, 'list_devices'):
+                devices_data = client.list_devices()
+            elif hasattr(client, 'query_devices'):
+                devices_data = client.query_devices()
+            else:
+                # Fallback: try to call the client as if it returns devices directly
+                # or use a generic API method
+                devices_data = client.devices() if hasattr(client, 'devices') else None
+                
+                if devices_data is None:
+                    # Try accessing as attribute
+                    devices_data = getattr(client, 'devices', None)
+                    
+                if devices_data is None:
+                    return {
+                        "success": False,
+                        "devices": [],
+                        "count": 0,
+                        "error": "Unable to determine NetboxClient API method. Please check NCP SDK documentation."
+                    }
+        except Exception as e:
+            logger.error(f"Error querying devices from NetBox: {e}", exc_info=True)
+            return {
+                "success": False,
+                "devices": [],
+                "count": 0,
+                "error": f"Failed to query NetBox devices: {str(e)}"
+            }
+        
+        # Convert NetBox objects to plain dicts
+        devices_list = []
+        
+        # Handle different response formats
+        if isinstance(devices_data, list):
+            devices_raw = devices_data
+        elif isinstance(devices_data, dict):
+            # Handle paginated responses
+            devices_raw = devices_data.get("results", devices_data.get("devices", []))
+        else:
+            # Try to iterate if it's an iterable
+            try:
+                devices_raw = list(devices_data)
+            except TypeError:
+                devices_raw = [devices_data]
+        
+        for device in devices_raw:
+            # Convert to dict if it's a NetBox object
+            if hasattr(device, '__dict__'):
+                device_dict = device.__dict__
+            elif hasattr(device, 'to_dict'):
+                device_dict = device.to_dict()
+            elif isinstance(device, dict):
+                device_dict = device
+            else:
+                # Try to convert using vars() or similar
+                try:
+                    device_dict = vars(device) if hasattr(vars, '__call__') else {}
+                except:
+                    device_dict = {}
+            
+            # Extract fields with graceful handling for missing data
+            # Handle nested objects (e.g., device_role, site, device_type)
+            role_obj = device_dict.get("device_role") or device_dict.get("role")
+            if isinstance(role_obj, dict):
+                role = role_obj.get("name") or role_obj.get("value")
+            elif hasattr(role_obj, 'name'):
+                role = role_obj.name
+            else:
+                role = role_obj if role_obj else None
+            
+            site_obj = device_dict.get("site")
+            if isinstance(site_obj, dict):
+                site = site_obj.get("name")
+            elif hasattr(site_obj, 'name'):
+                site = site_obj.name
+            else:
+                site = site_obj if site_obj else None
+            
+            region_obj = device_dict.get("region") or (site_obj.get("region") if isinstance(site_obj, dict) else None)
+            if isinstance(region_obj, dict):
+                region = region_obj.get("name")
+            elif hasattr(region_obj, 'name'):
+                region = region_obj.name
+            else:
+                region = region_obj if region_obj else None
+            
+            vendor_obj = device_dict.get("device_type") or device_dict.get("manufacturer")
+            if isinstance(vendor_obj, dict):
+                vendor = vendor_obj.get("manufacturer", {}).get("name") if isinstance(vendor_obj.get("manufacturer"), dict) else vendor_obj.get("name")
+            elif hasattr(vendor_obj, 'manufacturer'):
+                vendor = vendor_obj.manufacturer.name if hasattr(vendor_obj.manufacturer, 'name') else None
+            else:
+                vendor = vendor_obj if vendor_obj else None
+            
+            model_obj = device_dict.get("device_type") or device_dict.get("model")
+            if isinstance(model_obj, dict):
+                model = model_obj.get("model") or model_obj.get("slug")
+            elif hasattr(model_obj, 'model'):
+                model = model_obj.model
+            else:
+                model = model_obj if model_obj else None
+            
+            # Extract primary IP (management IP)
+            primary_ip = device_dict.get("primary_ip")
+            if isinstance(primary_ip, dict):
+                mgmt_ip = primary_ip.get("address", "").split('/')[0]  # Remove CIDR notation if present
+            elif isinstance(primary_ip, str):
+                mgmt_ip = primary_ip.split('/')[0]
+            else:
+                mgmt_ip = None
+            
+            # Build the device dictionary
+            device_info = {
+                "hostname": device_dict.get("name") or device_dict.get("hostname"),
+                "mgmt_ip": mgmt_ip,
+                "vendor": vendor or device_dict.get("vendor"),
+                "model": model or device_dict.get("model"),
+                "role": role,
+                "site": site,
+                "region": region
+            }
+            
+            # Remove None values for cleaner output (optional)
+            device_info = {k: v for k, v in device_info.items() if v is not None}
+            
+            devices_list.append(device_info)
+        
+        logger.info(f"Successfully retrieved {len(devices_list)} devices from NetBox")
+        
+        return {
+            "success": True,
+            "devices": devices_list,
+            "count": len(devices_list),
+            "error": None
+        }
+        
+    except Exception as e:
+        logger.error(f"Error in get_inventory_devices: {e}", exc_info=True)
+        return {
+            "success": False,
+            "devices": [],
+            "count": 0,
+            "error": f"NetBox inventory query failed: {str(e)}"
+        }
+
+
 # -----------------------------
 # 6. COMBINED DATA SOURCE TOOLS
 # -----------------------------
@@ -1030,11 +1262,12 @@ if __name__ == "__main__":
     logger.info("  5. remediate_link - Automated link remediation recommendations")
     logger.info("  6. get_device_status_from_telnet - Execute commands via Telnet")
     logger.info("  7. get_topology_from_netbox - Fetch topology from NetBox")
-    logger.info("  8. get_device_and_interface_report - Combined NetBox + Telnet report")
-    logger.info("  9. get_device_info - Query device inventory from YAML")
-    logger.info("  10. list_devices_by_vlan - Find devices by VLAN ID")
-    logger.info("  11. get_vlan_table - Generate VLAN-to-device mapping table")
-    logger.info("  12. validate_system_health - System-wide health validation (AI ONE Center)")
+    logger.info("  8. get_inventory_devices - Query device inventory from NetBox (NCP SDK)")
+    logger.info("  9. get_device_and_interface_report - Combined NetBox + Telnet report")
+    logger.info("  10. get_device_info - Query device inventory from YAML")
+    logger.info("  11. list_devices_by_vlan - Find devices by VLAN ID")
+    logger.info("  12. get_vlan_table - Generate VLAN-to-device mapping table")
+    logger.info("  13. validate_system_health - System-wide health validation (AI ONE Center)")
     logger.info("Waiting for requests on stdio...")
     
     try:

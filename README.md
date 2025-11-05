@@ -687,6 +687,88 @@ if topology["success"]:
             monitor_device(device["name"])
 ```
 
+### NetBox Inventory Query (NCP SDK)
+
+The `get_inventory_devices` tool uses the NCP SDK's `NetboxClient` to query device inventory directly from your NetBox instance. This provides a standardized, data-backed approach to inventory management.
+
+**Prerequisites:**
+1. Install the NCP SDK:
+   ```bash
+   pip install git+https://github.com/Ashok-Aviz/ncp-sdk.git
+   ```
+
+2. Configure environment variables in your `.env` file:
+   ```bash
+   NETBOX_URL=https://netbox.example.com
+   NETBOX_TOKEN=your-netbox-api-token-here
+   ```
+
+**How to Use:**
+
+1. **Set up environment variables:**
+   Create or update your `.env` file in the project root:
+   ```bash
+   NETBOX_URL=https://your-netbox-instance.com
+   NETBOX_TOKEN=abc123def456ghi789...
+   ```
+
+2. **Call the tool from client_test.py:**
+   ```python
+   # Test get_inventory_devices tool
+   inventory_data = call_tool(proc, "get_inventory_devices", {}, request_id)
+   
+   if inventory_data and inventory_data.get("success"):
+       devices = inventory_data.get("devices", [])
+       print(f"Retrieved {len(devices)} devices from NetBox")
+       for device in devices:
+           print(f"  - {device.get('hostname')}: {device.get('mgmt_ip')} ({device.get('role')})")
+   else:
+       error = inventory_data.get("error") if inventory_data else "Unknown error"
+       print(f"Error: {error}")
+   ```
+
+3. **Call via MCP server:**
+   ```json
+   {
+     "method": "tools/call",
+     "params": {
+       "name": "get_inventory_devices"
+     }
+   }
+   ```
+
+**Response Format:**
+The tool returns a JSON-serializable dictionary with the following structure:
+```json
+{
+  "success": true,
+  "devices": [
+    {
+      "hostname": "switch-01",
+      "mgmt_ip": "192.168.1.10",
+      "vendor": "Cisco",
+      "model": "N9K-C93180YC-EX",
+      "role": "leaf",
+      "site": "Datacenter-A",
+      "region": "US-West"
+    }
+  ],
+  "count": 1,
+  "error": null
+}
+```
+
+**Error Handling:**
+- If `NETBOX_URL` or `NETBOX_TOKEN` are not set, the tool returns an error with clear instructions
+- If the NCP SDK is not installed, the tool provides installation instructions
+- If NetBox authentication fails, the error message is included in the response
+- Missing fields are handled gracefully (set to `None` if not available)
+
+**Note:** This tool requires the NCP SDK to be installed. If you encounter import errors, ensure you've installed it with:
+```bash
+pip install git+https://github.com/Ashok-Aviz/ncp-sdk.git
+```
+
 ## Inventory Insight Agent
 
 The **Inventory Insight Agent** is a production-style inventory management system that provides unified device inventory from multiple sources (YAML and NetBox), validates and correlates data, detects mismatches, and generates actionable reports.
