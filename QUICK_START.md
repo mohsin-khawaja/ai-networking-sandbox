@@ -157,7 +157,7 @@ Before running queries, ensure:
 
 ---
 
-## 💡 Example Queries for main_agent.py
+## Example Queries for main_agent.py
 
 Once `main_agent.py` is running, try these:
 
