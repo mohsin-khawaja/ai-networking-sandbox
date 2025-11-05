@@ -74,6 +74,64 @@ def get_port_telemetry() -> dict:
 
 
 @mcp.tool()
+def get_telemetry_timeseries() -> dict:
+    """
+    Return a synthetic time-series representing utilization for testing chart visualization.
+    
+    Returns a time-series of network utilization metrics with timestamps and values.
+    This tool is designed for chart visualization and can be extended to use real telemetry data.
+    
+    Maps to Aviz NCP functionality:
+    - Provides historical telemetry data for visualization
+    - Supports time-series analysis and trend detection
+    - Can be extended to integrate with real-time telemetry streams
+    
+    Returns:
+        Dictionary containing:
+        - metric: str - Metric name (e.g., "utilization")
+        - timestamps: list[int] - Unix timestamps in seconds
+        - values: list[float] - Utilization values (0.0 to 1.0)
+    """
+    import random
+    import time
+    
+    try:
+        # Generate 30 data points spaced 1 minute apart
+        num_points = 30
+        base_timestamp = int(time.time()) - (num_points * 60)  # Start 30 minutes ago
+        timestamps = []
+        values = []
+        
+        for i in range(num_points):
+            # Timestamp spaced 1 minute apart
+            timestamp = base_timestamp + (i * 60)
+            timestamps.append(timestamp)
+            
+            # Utilization between 0.2 and 0.95
+            utilization = round(random.uniform(0.2, 0.95), 3)
+            values.append(utilization)
+        
+        result = {
+            "metric": "utilization",
+            "timestamps": timestamps,
+            "values": values
+        }
+        
+        logger.debug(f"Generated telemetry timeseries with {num_points} data points")
+        return result
+    
+    except Exception as e:
+        logger.error(f"Error generating telemetry timeseries: {e}", exc_info=True)
+        return {
+            "error": "Telemetry timeseries generation failed",
+            "message": str(e),
+            "metric": "utilization",
+            "timestamps": [],
+            "values": []
+        }
+
+
+@mcp.tool()
 def get_network_topology() -> dict:
     """
     Return a mock network topology with multiple device types.
