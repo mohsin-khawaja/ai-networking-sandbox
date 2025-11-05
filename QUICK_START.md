@@ -176,7 +176,7 @@ The coordinator agent will automatically route these to the appropriate tools, i
 
 ---
 
-## 🐛 Troubleshooting
+## Troubleshooting
 
 **Error: "ncp_sdk not installed"**
 ```bash
